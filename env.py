@@ -7,10 +7,11 @@ import torch
 
 
 class Env():
-  def __init__(self, args):
+  def __init__(self, args, training=True):
     self.device = args.device
     self.ale = atari_py.ALEInterface()
-    self.ale.setInt('random_seed', args.seed)
+    seed = args.seed if training else args.seed + 1 # different seeds for training and evaluation
+    self.ale.setInt('random_seed', seed)
     self.ale.setInt('max_num_frames_per_episode', args.max_episode_length)
     self.ale.setFloat('repeat_action_probability', 0)  # Disable sticky actions
     self.ale.setInt('frame_skip', 0)
@@ -22,7 +23,7 @@ class Env():
     self.life_termination = False  # Used to check if resetting only from loss of life
     self.window = args.history_length  # Number of frames to concatenate
     self.state_buffer = deque([], maxlen=args.history_length)
-    self.training = True  # Consistent with model training mode
+    self.training = training  # Consistent with model training mode
 
   def _get_state(self):
     state = cv2.resize(self.ale.getScreenGrayscale(), (84, 84), interpolation=cv2.INTER_LINEAR)
@@ -74,15 +75,15 @@ class Env():
         done = True
       self.lives = lives
     # Return state, reward, done
-    return torch.stack(list(self.state_buffer), 0), reward, done
+    return torch.stack(list(self.state_buffer), 0), reward, done, {}
 
-  # Uses loss of life as terminal signal
-  def train(self):
-    self.training = True
+  # # Uses loss of life as terminal signal
+  # def train(self):
+  #   self.training = True
 
-  # Uses standard terminal signal
-  def eval(self):
-    self.training = False
+  # # Uses standard terminal signal
+  # def eval(self):
+  #   self.training = False
 
   def action_space(self):
     return len(self.actions)

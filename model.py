@@ -83,3 +83,33 @@ class DQN(nn.Module):
     for name, module in self.named_children():
       if 'fc' in name:
         module.reset_noise()
+
+class SepsisDqn(nn.Module):
+  def __init__(self, args, action_space):
+    super(SepsisDqn, self).__init__()
+    self.atoms = args.atoms
+    self.action_space = action_space
+    self.input_size = args.history_length * 46
+
+    self.fc_h_v = NoisyLinear(self.input_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_h_a = NoisyLinear(self.input_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_z_v = NoisyLinear(args.hidden_size, self.atoms, std_init=args.noisy_std)
+    self.fc_z_a = NoisyLinear(args.hidden_size, action_space * self.atoms, std_init=args.noisy_std)
+
+  def forward(self, x, log=False):
+ 
+    x = x.view(-1, self.input_size)
+    v = self.fc_z_v(F.relu(self.fc_h_v(x)))  # Value stream
+    a = self.fc_z_a(F.relu(self.fc_h_a(x)))  # Advantage stream
+    v, a = v.view(-1, 1, self.atoms), a.view(-1, self.action_space, self.atoms)
+    q = v + a - a.mean(1, keepdim=True)  # Combine streams
+    if log:  # Use log softmax for numerical stability
+      q = F.log_softmax(q, dim=2)  # Log probabilities with action over second dimension
+    else:
+      q = F.softmax(q, dim=2)  # Probabilities with action over second dimension
+    return q
+
+  def reset_noise(self):
+    for name, module in self.named_children():
+      if 'fc' in name:
+        module.reset_noise()

@@ -90,6 +90,11 @@ ENV/
 
 
 # Saved models
+results
 *.pth
 # Plots
 *.html
+
+# vscode
+.vscode/
+*.sh

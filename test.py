@@ -10,21 +10,19 @@ from env import Env
 
 
 # Test DQN
-def test(args, T, dqn, val_mem, metrics, results_dir, evaluate=False):
-  env = Env(args)
-  env.eval()
+def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False):
+  env = env_class(args, training=False)
   metrics['steps'].append(T)
   T_rewards, T_Qs = [], []
 
   # Test performance over several episodes
   done = True
   for _ in range(args.evaluation_episodes):
-    while True:
-      if done:
-        state, reward_sum, done = env.reset(), 0, False
-
+    state, reward_sum, done = env.reset(), 0, False
+    for step in range(args.max_episode_length): 
+      
       action = dqn.act_e_greedy(state)  # Choose an action ε-greedily
-      state, reward, done = env.step(action)  # Step
+      state, reward, done, _ = env.step(action)  # Step
       reward_sum += reward
       if args.render:
         env.render()
