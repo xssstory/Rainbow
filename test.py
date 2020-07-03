@@ -5,6 +5,7 @@ import plotly
 from plotly.graph_objs import Scatter
 from plotly.graph_objs.scatter import Line
 import torch
+from tqdm import tqdm
 
 from env import Env
 
@@ -17,7 +18,7 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
 
   # Test performance over several episodes
   done = True
-  for _ in range(args.evaluation_episodes):
+  for _ in tqdm(range(args.evaluation_episodes)):
     state, reward_sum, done = env.reset(), 0, False
     for step in range(args.max_episode_length): 
       
@@ -51,6 +52,9 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
     # Plot
     _plot_line(metrics['steps'], metrics['rewards'], 'Reward', path=results_dir)
     _plot_line(metrics['steps'], metrics['Qs'], 'Q', path=results_dir)
+
+  if args.env_type == 'sepsis':
+    del env
 
   # Return average reward and Q-value
   return avg_reward, avg_Q
