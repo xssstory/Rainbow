@@ -9,7 +9,8 @@ from torch.nn.utils import clip_grad_norm_
 from model import DQN, SepsisDqn
 DQN_DIC = {
   'atari': DQN,
-  'sepsis': SepsisDqn
+  'sepsis': SepsisDqn,
+  'hiv': SepsisDqn,
 }
 
 class Agent():

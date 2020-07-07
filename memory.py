@@ -71,6 +71,9 @@ class ReplayMemory():
     elif args.env_type == 'sepsis':
       self.blank_trans = Transition(0, torch.zeros(46, 1, 1, dtype=torch.float32), None, 0, False)
       self.state_int = False
+    elif args.env_type == 'hiv':
+      self.blank_trans = Transition(0, torch.zeros(6, 1, dtype=torch.float32), None, 0, False)
+      self.state_int = False
     self.device = args.device
     self.capacity = capacity
     self.history = args.history_length
@@ -109,12 +112,19 @@ class ReplayMemory():
   # Returns a valid sample from a segment
   def _get_sample_from_segment(self, segment, i):
     valid = False
+    num_fail = 0
     while not valid:
-      sample = np.random.uniform(i * segment, (i + 1) * segment)  # Uniformly sample an element from within a segment
+      if num_fail < 10:
+        sample = np.random.uniform(i * segment, (i + 1) * segment)  # Uniformly sample an element from within a segment
+      else:
+        p_total = self.transitions.total()
+        sample = np.random.uniform(1, p_total) 
       prob, idx, tree_idx = self.transitions.find(sample)  # Retrieve sample from tree with un-normalised probability
       # Resample if transition straddled current index or probablity 0
       if (self.transitions.index - idx) % self.capacity > self.n and (idx - self.transitions.index) % self.capacity >= self.history and prob != 0:
         valid = True  # Note that conditions are valid but extra conservative around buffer index 0
+      else:
+        num_fail += 1
 
     # Retrieve all required transition data (from t - h to t + n)
     transition = self._get_transition(idx)

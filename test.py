@@ -22,7 +22,8 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
     state, reward_sum, done = env.reset(), 0, False
     for step in range(args.max_episode_length): 
       
-      action = dqn.act_e_greedy(state)  # Choose an action ε-greedily
+      # action = dqn.act_e_greedy(state)  # Choose an action ε-greedily
+      action = dqn.act(state)
       state, reward, done, _ = env.step(action)  # Step
       reward_sum += reward
       if args.render:

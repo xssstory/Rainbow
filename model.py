@@ -89,16 +89,24 @@ class SepsisDqn(nn.Module):
     super(SepsisDqn, self).__init__()
     self.atoms = args.atoms
     self.action_space = action_space
-    self.input_size = args.history_length * 46
+    self.input_size = args.history_length * 46 if args.env_type == 'sepsis' else args.history_length * 6 if args.env_type == 'hiv' else None
 
-    self.fc_h_v = NoisyLinear(self.input_size, args.hidden_size, std_init=args.noisy_std)
-    self.fc_h_a = NoisyLinear(self.input_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_forward = NoisyLinear(self.input_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_forward_2 = NoisyLinear(args.hidden_size, args.hidden_size, std_init=args.noisy_std)
+
+    self.fc_h_v = NoisyLinear(args.hidden_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_h_a = NoisyLinear(args.hidden_size, args.hidden_size, std_init=args.noisy_std)
     self.fc_z_v = NoisyLinear(args.hidden_size, self.atoms, std_init=args.noisy_std)
     self.fc_z_a = NoisyLinear(args.hidden_size, action_space * self.atoms, std_init=args.noisy_std)
 
   def forward(self, x, log=False):
  
     x = x.view(-1, self.input_size)
+    x = self.fc_forward(x)
+    x = F.relu(x)
+    x = self.fc_forward_2(x)
+    x = F.relu(x)
+
     v = self.fc_z_v(F.relu(self.fc_h_v(x)))  # Value stream
     a = self.fc_z_a(F.relu(self.fc_h_a(x)))  # Advantage stream
     v, a = v.view(-1, 1, self.atoms), a.view(-1, self.action_space, self.atoms)

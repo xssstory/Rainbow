@@ -12,7 +12,7 @@ import torch
 from tqdm import trange
 
 from agent import Agent
-from env import Env
+from env import Env, WhyNotEnv
 from memory import ReplayMemory
 from test import test
 
@@ -23,6 +23,7 @@ from gym_sepsis.envs.sepsis_env import SepsisEnv
 ENV_DIC = {
   'atari': Env,
   'sepsis': SepsisEnv,
+  'hiv': WhyNotEnv,
 }
 
 # Note that hyperparameters may originally be reported in ATARI game frames instead of agent steps
@@ -30,7 +31,7 @@ parser = argparse.ArgumentParser(description='Rainbow')
 parser.add_argument('--id', type=str, default='default', help='Experiment ID')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis'])
+parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
 parser.add_argument('--game', type=str, default='space_invaders', choices=atari_py.list_games(), help='ATARI game')
 parser.add_argument('--T-max', type=int, default=int(50e6), metavar='STEPS', help='Number of training steps (4x number of frames)')
 parser.add_argument('--max-episode-length', type=int, default=int(108e3), metavar='LENGTH', help='Max episode length in game frames (0 to disable)')
@@ -172,16 +173,16 @@ else:
 
     # Train and test
     if T >= args.learn_start:
-      mem.priority_weight = min(mem.priority_weight + priority_weight_increase, 1)  # Anneal importance sampling weight β to 1
-
-      if T % args.replay_frequency == 0:
-        dqn.learn(mem)  # Train with n-step distributional double-Q learning
-
       if T % args.evaluation_interval == 0:
         dqn.eval()  # Set DQN (online network) to evaluation mode
         avg_reward, avg_Q = test(args, T, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type])  # Test
         log('T = ' + str(T) + ' / ' + str(args.T_max) + ' | Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q))
         dqn.train()  # Set DQN (online network) back to training mode
+
+      mem.priority_weight = min(mem.priority_weight + priority_weight_increase, 1)  # Anneal importance sampling weight β to 1
+
+      if T % args.replay_frequency == 0:
+        dqn.learn(mem)  # Train with n-step distributional double-Q learning
 
         # If memory path provided, save it
         if args.memory is not None:
