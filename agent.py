@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from torch import optim
 from torch.nn.utils import clip_grad_norm_
+import copy
 
 from model import DQN, SepsisDqn
 DQN_DIC = {
@@ -26,8 +27,10 @@ class Agent():
     self.n = args.multi_step
     self.discount = args.discount
     self.norm_clip = args.norm_clip
+    self.num_deploy = 0
+    self.deploy_policy = args.deploy_policy
 
-    self.online_net = self.dqn_model(args, self.action_space).to(device=args.device)
+    self.deploy_net = self.dqn_model(args, self.action_space).to(device=args.device)
     if args.model:  # Load pretrained model if provided
       if os.path.isfile(args.model):
         state_dict = torch.load(args.model, map_location='cpu')  # Always load tensors onto CPU by default, will shift to GPU if necessary
@@ -35,12 +38,20 @@ class Agent():
           for old_key, new_key in (('conv1.weight', 'convs.0.weight'), ('conv1.bias', 'convs.0.bias'), ('conv2.weight', 'convs.2.weight'), ('conv2.bias', 'convs.2.bias'), ('conv3.weight', 'convs.4.weight'), ('conv3.bias', 'convs.4.bias')):
             state_dict[new_key] = state_dict[old_key]  # Re-map state dict for old pretrained models
             del state_dict[old_key]  # Delete old keys for strict load_state_dict
-        self.online_net.load_state_dict(state_dict)
+        self.deploy_net.load_state_dict(state_dict)
         print("Loading pretrained model: " + args.model)
       else:  # Raise error if incorrect model path provided
         raise FileNotFoundError(args.model)
+    if self.deploy_policy is None:
+      self.online_net = self.deploy_net
+      assert self.online_net is self.deploy_net
+    else:
+      self.online_net = copy.deepcopy(self.deploy_net)
+      for param in self.deploy_net.parameters():
+        param.requires_grad = False
 
     self.online_net.train()
+    self.deploy_net.train()
 
     self.target_net = self.dqn_model(args, self.action_space).to(device=args.device)
     self.update_target_net()
@@ -53,11 +64,13 @@ class Agent():
   # Resets noisy weights in all linear layers (of online net only)
   def reset_noise(self):
     self.online_net.reset_noise()
+    # if self.deploy_policy is not None:
+    #   self.deploy_net.reset_noise()
 
   # Acts based on single state (no batch)
   def act(self, state):
     with torch.no_grad():
-      return (self.online_net(state.unsqueeze(0)) * self.support).sum(2).argmax(1).item()
+      return (self.deploy_net(state.unsqueeze(0)) * self.support).sum(2).argmax(1).item()
 
   # Acts with an ε-greedy policy (used for evaluation only)
   def act_e_greedy(self, state, epsilon=0.001):  # High ε can reduce evaluation scores drastically
@@ -106,18 +119,30 @@ class Agent():
 
   def update_target_net(self):
     self.target_net.load_state_dict(self.online_net.state_dict())
+  
+  def update_deploy_net(self, T, args):
+    if self.deploy_policy is None:
+      # self.deploy_net.load_state_dict(self.online_net.state_dict())
+      assert self.deploy_net is self.online_net
+      self.num_deploy += 1
+    elif self.deploy_policy == 'fixed' and T % args.delploy_interval == 0:
+      assert self.deploy_net is not self.online_net
+      self.deploy_net.load_state_dict(self.online_net.state_dict())
+      self.num_deploy += 1
 
   # Save model parameters on current device (don't move model between devices)
   def save(self, path, name='model.pth'):
-    torch.save(self.online_net.state_dict(), os.path.join(path, name))
+    torch.save(self.deploy_net.state_dict(), os.path.join(path, name))
 
   # Evaluates Q-value based on single state (no batch)
   def evaluate_q(self, state):
     with torch.no_grad():
-      return (self.online_net(state.unsqueeze(0)) * self.support).sum(2).max(1)[0].item()
+      return (self.deploy_net(state.unsqueeze(0)) * self.support).sum(2).max(1)[0].item()
 
   def train(self):
     self.online_net.train()
+    self.deploy_net.train()
 
   def eval(self):
     self.online_net.eval()
+    self.deploy_net.eval()

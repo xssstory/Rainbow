@@ -14,6 +14,7 @@ from env import Env
 def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False):
   env = env_class(args, training=False)
   metrics['steps'].append(T)
+  metrics['nums_deploy'].append(dqn.num_deploy)
   T_rewards, T_Qs = [], []
 
   # Test performance over several episodes

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from collections import deque
 import random
+import numpy as np
 import atari_py
 import cv2
 import torch
@@ -42,7 +43,7 @@ class Env():
       self._reset_buffer()
       self.ale.reset_game()
       # Perform up to 30 random no-ops before starting
-      for _ in range(random.randrange(30)):
+      for i in range(np.random.randint(30)):
         self.ale.act(0)  # Assumes raw action 0 is always no-op
         if self.ale.game_over():
           self.ale.reset_game()

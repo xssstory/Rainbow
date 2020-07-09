@@ -32,6 +32,8 @@ parser.add_argument('--id', type=str, default='default', help='Experiment ID')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
+parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'td-error', 'dqn-feature'])
+parser.add_argument('--delploy-interval', default=1, type=int)
 parser.add_argument('--game', type=str, default='space_invaders', choices=atari_py.list_games(), help='ATARI game')
 parser.add_argument('--T-max', type=int, default=int(50e6), metavar='STEPS', help='Number of training steps (4x number of frames)')
 parser.add_argument('--max-episode-length', type=int, default=int(108e3), metavar='LENGTH', help='Max episode length in game frames (0 to disable)')
@@ -82,7 +84,7 @@ with open(os.path.join(results_dir, 'params.txt'), 'w') as f:
   for k, v in vars(args).items():
     f.write(' ' * 26 + k + ': ' + str(v) + '\n')
 
-metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf')}
+metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf'), 'nums_deploy': []}
 np.random.seed(args.seed)
 torch.manual_seed(np.random.randint(1, 10000))
 if torch.cuda.is_available() and not args.disable_cuda:
@@ -176,14 +178,14 @@ else:
       if T % args.evaluation_interval == 0:
         dqn.eval()  # Set DQN (online network) to evaluation mode
         avg_reward, avg_Q = test(args, T, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type])  # Test
-        log('T = ' + str(T) + ' / ' + str(args.T_max) + ' | Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q))
+        log('T = ' + str(T) + ' / ' + str(args.T_max) + ' | Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q) + ' | Deploy: ' + str(metrics['nums_deploy'][-1]))
         dqn.train()  # Set DQN (online network) back to training mode
 
       mem.priority_weight = min(mem.priority_weight + priority_weight_increase, 1)  # Anneal importance sampling weight β to 1
 
       if T % args.replay_frequency == 0:
         dqn.learn(mem)  # Train with n-step distributional double-Q learning
-
+        dqn.update_deploy_net(T // args.replay_frequency, args)
         # If memory path provided, save it
         if args.memory is not None:
           save_memory(mem, args.memory, args.disable_bzip_memory)
