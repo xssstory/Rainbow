@@ -83,6 +83,11 @@ class DQN(nn.Module):
     for name, module in self.named_children():
       if 'fc' in name:
         module.reset_noise()
+  
+  def extract(self, x):
+    x = self.convs(x)
+    x = x.view(-1, self.conv_output_size)
+    return x
 
 class SepsisDqn(nn.Module):
   def __init__(self, args, action_space):
@@ -121,3 +126,11 @@ class SepsisDqn(nn.Module):
     for name, module in self.named_children():
       if 'fc' in name:
         module.reset_noise()
+  
+  def extract(self, x):
+    x = x.view(-1, self.input_size)
+    x = self.fc_forward(x)
+    x = F.relu(x)
+    x = self.fc_forward_2(x)
+    x = F.relu(x)
+    return x

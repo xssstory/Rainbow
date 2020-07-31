@@ -34,6 +34,8 @@ parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
 parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'td-error', 'dqn-feature'])
 parser.add_argument('--delploy-interval', default=1, type=int)
+parser.add_argument('--feature-threshold', default=0.98, type=float)
+parser.add_argument('--td-error-threshold', default=0.1, type=float)
 parser.add_argument('--game', type=str, default='space_invaders', choices=atari_py.list_games(), help='ATARI game')
 parser.add_argument('--T-max', type=int, default=int(50e6), metavar='STEPS', help='Number of training steps (4x number of frames)')
 parser.add_argument('--max-episode-length', type=int, default=int(108e3), metavar='LENGTH', help='Max episode length in game frames (0 to disable)')
@@ -185,7 +187,7 @@ else:
 
       if T % args.replay_frequency == 0:
         dqn.learn(mem)  # Train with n-step distributional double-Q learning
-        dqn.update_deploy_net(T // args.replay_frequency, args)
+        dqn.update_deploy_net(T // args.replay_frequency, args, mem)
         # If memory path provided, save it
         if args.memory is not None:
           save_memory(mem, args.memory, args.disable_bzip_memory)
