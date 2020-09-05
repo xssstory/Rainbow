@@ -20,6 +20,9 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), 'gym-sepsis'))
 from gym_sepsis.envs.sepsis_env import SepsisEnv
 
+from hash_count import HashTable
+import math
+
 ENV_DIC = {
   'atari': Env,
   'sepsis': SepsisEnv,
@@ -32,10 +35,13 @@ parser.add_argument('--id', type=str, default='default', help='Experiment ID')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
-parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'td-error', 'dqn-feature'])
-parser.add_argument('--delploy-interval', default=1, type=int)
-parser.add_argument('--feature-threshold', default=0.98, type=float)
-parser.add_argument('--td-error-threshold', default=0.1, type=float)
+parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'td-error', 'dqn-feature'])
+parser.add_argument('--delploy-interval', default=1, type=int, 'This setting is useful for fixed and dqn-feature-fixed')
+parser.add_argument('--exp-base', default=2, type=float, 'This setting is useful for exp')
+parser.add_argument('--feature-threshold', default=0.98, type=float, help='This setting is useful for dqn-feature and dqn-feature-fixed')
+parser.add_argument('--td-error-threshold', default=0.1, type=float, hekp='This settiong is useful for td-error')
+parser.add_argument('--count-base-bonus', default=-1, type=float)
+parser.add_argument('--hash-dim', default=32, type=float)
 parser.add_argument('--game', type=str, default='space_invaders', choices=atari_py.list_games(), help='ATARI game')
 parser.add_argument('--T-max', type=int, default=int(50e6), metavar='STEPS', help='Number of training steps (4x number of frames)')
 parser.add_argument('--max-episode-length', type=int, default=int(108e3), metavar='LENGTH', help='Max episode length in game frames (0 to disable)')
@@ -124,8 +130,13 @@ def save_memory(memory, memory_path, disable_bzip):
 env = ENV_DIC[args.env_type](args)
 action_space = env.action_space()
 
+if args.count_base_bonus > 0:
+  hash_table = HashTable(args)
+
 # Agent
 dqn = Agent(args, env)
+if args.model:
+  hash_table.load(os.path.dirname(args.model))
 
 # If a model is provided, and evaluate is fale, presumably we want to resume, so try to load memory
 if args.model is not None and not args.evaluate:
@@ -171,13 +182,17 @@ else:
 
     action = dqn.act(state)  # Choose an action greedily (with noisy weights)
     next_state, reward, done, _ = env.step(action)  # Step
+    if args.count_base_bonus > 0:
+      reward = reward + args.count_base_bonus / math.sqrt(hash_table.step(state, action))
+
     if args.reward_clip > 0:
-      reward = max(min(reward, args.reward_clip), -args.reward_clip)  # Clip rewards
+      reward = max(min(reward, args.reward_clip), -args.reward_clip)  # Clip rewards      
+
     mem.append(state, action, reward, done)  # Append transition to memory
 
     # Train and test
     if T >= args.learn_start:
-      if T % args.evaluation_interval == 0:
+      if (T % args.evaluation_interval == 0 and args.deploy_policy is None) or (not metrics['nums_deploy']) or (dqn.num_deploy > metrics['nums_deploy'][-1] and args.deploy_policy is not None): 
         dqn.eval()  # Set DQN (online network) to evaluation mode
         avg_reward, avg_Q = test(args, T, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type])  # Test
         log('T = ' + str(T) + ' / ' + str(args.T_max) + ' | Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q) + ' | Deploy: ' + str(metrics['nums_deploy'][-1]))
@@ -199,6 +214,7 @@ else:
       # Checkpoint the network
       if (args.checkpoint_interval != 0) and (T % args.checkpoint_interval == 0):
         dqn.save(results_dir, 'checkpoint_{}.pth'.format(T))
+        hash_table.save(results_dir, 'hash.pth')
 
     state = next_state
 

@@ -6,6 +6,7 @@ import torch
 from torch import optim
 from torch.nn.utils import clip_grad_norm_
 import copy
+import math
 
 from model import DQN, SepsisDqn
 DQN_DIC = {
@@ -29,6 +30,9 @@ class Agent():
     self.norm_clip = args.norm_clip
     self.num_deploy = 0
     self.deploy_policy = args.deploy_policy
+    if self.deploy_policy == 'exp':
+      self.exponent = 0
+      self.exp_base = args.exp_base
 
     self.deploy_net = self.dqn_model(args, self.action_space).to(device=args.device)
     if args.model:  # Load pretrained model if provided
@@ -161,6 +165,12 @@ class Agent():
       assert self.deploy_net is not self.online_net
       self.deploy_net.load_state_dict(self.online_net.state_dict())
       self.num_deploy += 1
+    elif self.deploy_policy == 'exp':
+      if (T - args.learn_start // args.replay_frequency) >= self.exp_base ** self.exponent:
+        assert self.deploy_net is not self.online_net
+        self.deploy_net.load_state_dict(self.online_net.state_dict())
+        self.num_deploy += 1
+        self.exponent += 1
     else:
       if T % args.delploy_interval != 0:
         return

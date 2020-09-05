@@ -6,6 +6,46 @@ from torch import nn
 from torch.nn import functional as F
 
 
+# Factorised NoisyLinear layer with bias
+class NoisyLinear(nn.Module):
+  def __init__(self, in_features, out_features, std_init=0.5):
+    super(NoisyLinear, self).__init__()
+    self.in_features = in_features
+    self.out_features = out_features
+    self.std_init = std_init
+    self.weight_mu = nn.Parameter(torch.empty(out_features, in_features))
+    self.weight_sigma = nn.Parameter(torch.empty(out_features, in_features))
+    self.register_buffer('weight_epsilon', torch.empty(out_features, in_features))
+    self.bias_mu = nn.Parameter(torch.empty(out_features))
+    self.bias_sigma = nn.Parameter(torch.empty(out_features))
+    self.register_buffer('bias_epsilon', torch.empty(out_features))
+    self.reset_parameters()
+    self.reset_noise()
+
+  def reset_parameters(self):
+    mu_range = 1 / math.sqrt(self.in_features)
+    self.weight_mu.data.uniform_(-mu_range, mu_range)
+    self.weight_sigma.data.fill_(self.std_init / math.sqrt(self.in_features))
+    self.bias_mu.data.uniform_(-mu_range, mu_range)
+    self.bias_sigma.data.fill_(self.std_init / math.sqrt(self.out_features))
+
+  def _scale_noise(self, size):
+    x = torch.randn(size)
+    return x.sign().mul_(x.abs().sqrt_())
+
+  def reset_noise(self):
+    epsilon_in = self._scale_noise(self.in_features)
+    epsilon_out = self._scale_noise(self.out_features)
+    self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in))
+    self.bias_epsilon.copy_(epsilon_out)
+
+  def forward(self, input):
+    if self.training:
+      return F.linear(input, self.weight_mu + self.weight_sigma * self.weight_epsilon, self.bias_mu + self.bias_sigma * self.bias_epsilon)
+    else:
+      return F.linear(input, self.weight_mu, self.bias_mu)
+
+
 class DQN(nn.Module):
   def __init__(self, args, action_space):
     super(DQN, self).__init__()
@@ -21,10 +61,10 @@ class DQN(nn.Module):
       self.convs = nn.Sequential(nn.Conv2d(args.history_length, 32, 5, stride=5, padding=0), nn.ReLU(),
                                  nn.Conv2d(32, 64, 5, stride=5, padding=0), nn.ReLU())
       self.conv_output_size = 576
-    self.fc_h_v = nn.Linear(self.conv_output_size, args.hidden_size)
-    self.fc_h_a = nn.Linear(self.conv_output_size, args.hidden_size)
-    self.fc_z_v = nn.Linear(args.hidden_size, self.atoms)
-    self.fc_z_a = nn.Linear(args.hidden_size, action_space * self.atoms)
+    self.fc_h_v = NoisyLinear(self.conv_output_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_h_a = NoisyLinear(self.conv_output_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_z_v = NoisyLinear(args.hidden_size, self.atoms, std_init=args.noisy_std)
+    self.fc_z_a = NoisyLinear(args.hidden_size, action_space * self.atoms, std_init=args.noisy_std)
 
   def forward(self, x, log=False):
     x = self.convs(x)
@@ -40,7 +80,9 @@ class DQN(nn.Module):
     return q
 
   def reset_noise(self):
-    pass
+    for name, module in self.named_children():
+      if 'fc' in name:
+        module.reset_noise()
   
   def extract(self, x):
     x = self.convs(x)
@@ -54,13 +96,13 @@ class SepsisDqn(nn.Module):
     self.action_space = action_space
     self.input_size = args.history_length * 46 if args.env_type == 'sepsis' else args.history_length * 6 if args.env_type == 'hiv' else None
 
-    self.fc_forward = nn.Linear(self.input_size, args.hidden_size)
-    self.fc_forward_2 = nn.Linear(args.hidden_size, args.hidden_size)
+    self.fc_forward = NoisyLinear(self.input_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_forward_2 = NoisyLinear(args.hidden_size, args.hidden_size, std_init=args.noisy_std)
 
-    self.fc_h_v = nn.Linear(args.hidden_size, args.hidden_size)
-    self.fc_h_a = nn.Linear(args.hidden_size, args.hidden_size)
-    self.fc_z_v = nn.Linear(args.hidden_size, self.atoms)
-    self.fc_z_a = nn.Linear(args.hidden_size, action_space * self.atoms)
+    self.fc_h_v = NoisyLinear(args.hidden_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_h_a = NoisyLinear(args.hidden_size, args.hidden_size, std_init=args.noisy_std)
+    self.fc_z_v = NoisyLinear(args.hidden_size, self.atoms, std_init=args.noisy_std)
+    self.fc_z_a = NoisyLinear(args.hidden_size, action_space * self.atoms, std_init=args.noisy_std)
 
   def forward(self, x, log=False):
  
@@ -81,7 +123,9 @@ class SepsisDqn(nn.Module):
     return q
 
   def reset_noise(self):
-    pass
+    for name, module in self.named_children():
+      if 'fc' in name:
+        module.reset_noise()
   
   def extract(self, x):
     x = x.view(-1, self.input_size)
