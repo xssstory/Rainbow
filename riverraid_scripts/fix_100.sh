@@ -1,0 +1,9 @@
+CUDA_VISIBLE_DEVICES=$1 python main.py \
+	--id=riverraid.deploy_100_count_seed_$2 \
+	--env-type=atari \
+	--game=riverraid \
+	--count-base-bonus=0.01 \
+        --seed=$2 \
+	--deploy-policy=fixed \
+	--delploy-interval=100 \
+	--checkpoint-interval=100000

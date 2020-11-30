@@ -55,7 +55,7 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
     _plot_line(metrics['steps'], metrics['rewards'], 'Reward', path=results_dir)
     _plot_line(metrics['steps'], metrics['Qs'], 'Q', path=results_dir)
 
-  if args.env_type == 'sepsis':
+#  if args.env_type == 'sepsis':
     del env
 
   # Return average reward and Q-value

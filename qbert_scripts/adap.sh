@@ -1,0 +1,10 @@
+CUDA_VISIBLE_DEVICES=$1 python main.py \
+	--id=qbert.deploy_adaptive.100_count_seed_$2 \
+	--env-type=atari \
+	--game=qbert \
+	--deploy-policy=dqn-feature-min \
+	--min-interval=adaptive.100 \
+	--feature-threshold=2 \
+	--count-base-bonus=0.01 \
+        --seed=$2 \
+	--checkpoint-interval=100000

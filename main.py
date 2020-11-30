@@ -29,17 +29,30 @@ ENV_DIC = {
   'hiv': WhyNotEnv,
 }
 
+def min_interval_type(s):
+  try:
+    value = int(s)
+  except ValueError:
+    if s.startswith('adaptive.'):
+      value = s
+    else: 
+      raise argparse.ArgumentTypeError('min-interval must be a integer or "adaptive.int"')
+  return value
+
+
 # Note that hyperparameters may originally be reported in ATARI game frames instead of agent steps
 parser = argparse.ArgumentParser(description='Rainbow')
 parser.add_argument('--id', type=str, default='default', help='Experiment ID')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
-parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'td-error', 'dqn-feature'])
-parser.add_argument('--delploy-interval', default=1, type=int, 'This setting is useful for fixed and dqn-feature-fixed')
-parser.add_argument('--exp-base', default=2, type=float, 'This setting is useful for exp')
+parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', 'q-value', 'dqn-feature-min'])
+parser.add_argument('--delploy-interval', default=1, type=int)
+parser.add_argument('--min-interval', default=0, type=min_interval_type, help='This setting is useful for dqn-feature-min')
+parser.add_argument('--exp-base', default=2, type=float, help='This setting is useful for exp')
 parser.add_argument('--feature-threshold', default=0.98, type=float, help='This setting is useful for dqn-feature and dqn-feature-fixed')
-parser.add_argument('--td-error-threshold', default=0.1, type=float, hekp='This settiong is useful for td-error')
+parser.add_argument('--td-error-threshold', default=0.1, type=float, help='This settiong is useful for td-error')
+parser.add_argument('--q-value-threshold', default=0.05, type=float, help='This setting is useful for q-value')
 parser.add_argument('--count-base-bonus', default=-1, type=float)
 parser.add_argument('--hash-dim', default=32, type=float)
 parser.add_argument('--game', type=str, default='space_invaders', choices=atari_py.list_games(), help='ATARI game')
@@ -67,9 +80,9 @@ parser.add_argument('--batch-size', type=int, default=32, metavar='SIZE', help='
 parser.add_argument('--norm-clip', type=float, default=10, metavar='NORM', help='Max L2 norm for gradient clipping')
 parser.add_argument('--learn-start', type=int, default=int(20e3), metavar='STEPS', help='Number of steps before starting training')
 parser.add_argument('--evaluate', action='store_true', help='Evaluate only')
-parser.add_argument('--evaluation-interval', type=int, default=100000, metavar='STEPS', help='Number of training steps between evaluations')
+parser.add_argument('--evaluation-interval', type=int, default=10000, metavar='STEPS', help='Number of training steps between evaluations')
 parser.add_argument('--evaluation-episodes', type=int, default=10, metavar='N', help='Number of evaluation episodes to average over')
-parser.add_argument('--result-dir', default='/com_space/liyunfei/xss_rainbow/', type=str)
+parser.add_argument('--result-dir', default='results/', type=str)
 # TODO: Note that DeepMind's evaluation method is running the latest agent for 500K frames ever every 1M steps
 parser.add_argument('--evaluation-size', type=int, default=500, metavar='N', help='Number of transitions to use for validating Q')
 parser.add_argument('--render', action='store_true', help='Display screen (testing only)')
@@ -193,10 +206,11 @@ else:
     # Train and test
     if T >= args.learn_start:
       if (T % args.evaluation_interval == 0 and args.deploy_policy is None) or (not metrics['nums_deploy']) or (dqn.num_deploy > metrics['nums_deploy'][-1] and args.deploy_policy is not None): 
-        dqn.eval()  # Set DQN (online network) to evaluation mode
-        avg_reward, avg_Q = test(args, T, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type])  # Test
-        log('T = ' + str(T) + ' / ' + str(args.T_max) + ' | Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q) + ' | Deploy: ' + str(metrics['nums_deploy'][-1]))
-        dqn.train()  # Set DQN (online network) back to training mode
+        if (not metrics['steps']) or T - metrics['steps'][-1] >= args.evaluation_interval:
+          dqn.eval()  # Set DQN (online network) to evaluation mode
+          avg_reward, avg_Q = test(args, T, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type])  # Test
+          log('T = ' + str(T) + ' / ' + str(args.T_max) + ' | Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q) + ' | Deploy: ' + str(metrics['nums_deploy'][-1]))
+          dqn.train()  # Set DQN (online network) back to training mode
 
       mem.priority_weight = min(mem.priority_weight + priority_weight_increase, 1)  # Anneal importance sampling weight β to 1
 
