@@ -134,7 +134,7 @@ class Agent():
   def update_target_net(self):
     self.target_net.load_state_dict(self.online_net.state_dict())
   
-  def update_deploy_net(self, T, args, mem):
+  def update_deploy_net(self, T, args, mem, is_reset=False):
     if self.deploy_policy is None:
       # self.deploy_net.load_state_dict(self.online_net.state_dict())
       assert self.deploy_net is self.online_net
@@ -149,6 +149,10 @@ class Agent():
         self.deploy_net.load_state_dict(self.online_net.state_dict())
         self.num_deploy += 1
         self.exponent += 1
+    elif self.deploy_policy == "reset":
+      if is_reset:
+        self.deploy_net.load_state_dict(self.online_net.state_dict())
+        self.num_deploy += 1
     else:
       # if T % args.delploy_interval != 0:
       #   return

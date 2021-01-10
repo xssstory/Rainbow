@@ -46,7 +46,8 @@ parser.add_argument('--id', type=str, default='default', help='Experiment ID')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
-parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', 'q-value', 'dqn-feature-min'])
+parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', 'q-value', 'dqn-feature-min',
+                                                              'reset'])
 parser.add_argument('--delploy-interval', default=1, type=int)
 parser.add_argument('--min-interval', default=0, type=min_interval_type, help='This setting is useful for dqn-feature-min')
 parser.add_argument('--exp-base', default=2, type=float, help='This setting is useful for exp')
@@ -214,12 +215,16 @@ else:
 
       mem.priority_weight = min(mem.priority_weight + priority_weight_increase, 1)  # Anneal importance sampling weight β to 1
 
-      if T % args.replay_frequency == 0:
-        dqn.learn(mem)  # Train with n-step distributional double-Q learning
-        dqn.update_deploy_net(T // args.replay_frequency, args, mem)
-        # If memory path provided, save it
-        if args.memory is not None:
-          save_memory(mem, args.memory, args.disable_bzip_memory)
+      if args.deploy_policy == "reset":
+        # For reset deploy, it may happen when T mod replay-frequency != 0
+        dqn.update_deploy_net(None, args, mem, is_reset=(T > 0 and done))
+      else:
+        if T % args.replay_frequency == 0:
+          dqn.learn(mem)  # Train with n-step distributional double-Q learning
+          dqn.update_deploy_net(T // args.replay_frequency, args, mem)
+          # If memory path provided, save it
+          if args.memory is not None:
+            save_memory(mem, args.memory, args.disable_bzip_memory)
 
       # Update target network
       if T % args.target_update == 0:
