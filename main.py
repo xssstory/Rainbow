@@ -106,7 +106,8 @@ with open(os.path.join(results_dir, 'params.txt'), 'w') as f:
   for k, v in vars(args).items():
     f.write(' ' * 26 + k + ': ' + str(v) + '\n')
 
-metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf'), 'nums_deploy': []}
+metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf'), 'nums_deploy': [],
+           'episode_length': []}
 np.random.seed(args.seed)
 torch.manual_seed(np.random.randint(1, 10000))
 if torch.cuda.is_available() and not args.disable_cuda:
@@ -187,15 +188,19 @@ else:
   # Training loop
   dqn.train()
   T, done = 0, True
+  episode_length = 0
   for T in trange(1, args.T_max + 1):
     if done:
       state, done = env.reset(), False
+      metrics['episode_length'].append(episode_length)
+      episode_length = 0
 
     if T % args.replay_frequency == 0:
       dqn.reset_noise()  # Draw a new set of noisy weights
 
     action = dqn.act(state)  # Choose an action greedily (with noisy weights)
     next_state, reward, done, _ = env.step(action)  # Step
+    episode_length += 1
     if args.count_base_bonus > 0:
       reward = reward + args.count_base_bonus / math.sqrt(hash_table.step(state, action))
 
