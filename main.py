@@ -14,10 +14,11 @@ from tqdm import trange
 from agent import Agent
 from env import Env, WhyNotEnv
 from memory import ReplayMemory
-from test import test
+from test import test, eval_visitation
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), 'gym-sepsis'))
+# sys.path.append("/home/yunfei/projects/Rainbow/gym-sepsis")
 from gym_sepsis.envs.sepsis_env import SepsisEnv
 
 from hash_count import HashTable
@@ -83,6 +84,7 @@ parser.add_argument('--learn-start', type=int, default=int(20e3), metavar='STEPS
 parser.add_argument('--evaluate', action='store_true', help='Evaluate only')
 parser.add_argument('--evaluation-interval', type=int, default=10000, metavar='STEPS', help='Number of training steps between evaluations')
 parser.add_argument('--evaluation-episodes', type=int, default=10, metavar='N', help='Number of evaluation episodes to average over')
+parser.add_argument('--state-visitation-episodes', type=int, default=10, help='Number of evaluation episodes to measure state visitation')
 parser.add_argument('--result-dir', default='results/', type=str)
 # TODO: Note that DeepMind's evaluation method is running the latest agent for 500K frames ever every 1M steps
 parser.add_argument('--evaluation-size', type=int, default=500, metavar='N', help='Number of transitions to use for validating Q')
@@ -107,7 +109,7 @@ with open(os.path.join(results_dir, 'params.txt'), 'w') as f:
     f.write(' ' * 26 + k + ': ' + str(v) + '\n')
 
 metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf'), 'nums_deploy': [],
-           'episode_length': []}
+           'episode_length': [], 'episode_reward': []}
 np.random.seed(args.seed)
 torch.manual_seed(np.random.randint(1, 10000))
 if torch.cuda.is_available() and not args.disable_cuda:
@@ -184,22 +186,31 @@ if args.evaluate:
   dqn.eval()  # Set DQN (online network) to evaluation mode
   avg_reward, avg_Q = test(args, 0, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type], evaluate=True)  # Test
   print('Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q))
+  eval_hash_table = HashTable(args)
+  state_visitation, total_steps = eval_visitation(args, dqn, eval_hash_table, ENV_DIC[args.env_type])
+  # TODO: measure entropy? number of visited states?
+  print("Number of visited states", len(state_visitation))
+  visit_freq = np.asarray(state_visitation.values()) / total_steps
+  state_dist_entropy = np.sum(-visit_freq * np.logp(visit_freq))
+  print("Entropy", state_dist_entropy)
 else:
   # Training loop
   dqn.train()
   T, done = 0, True
-  episode_length = 0
+  episode_length, episode_reward = 0, 0
   for T in trange(1, args.T_max + 1):
     if done:
       state, done = env.reset(), False
       metrics['episode_length'].append(episode_length)
-      episode_length = 0
+      metrics['episode_reward'].append(episode_reward)
+      episode_length, episode_reward = 0, 0
 
     if T % args.replay_frequency == 0:
       dqn.reset_noise()  # Draw a new set of noisy weights
 
     action = dqn.act(state)  # Choose an action greedily (with noisy weights)
     next_state, reward, done, _ = env.step(action)  # Step
+    episode_reward += reward
     episode_length += 1
     if args.count_base_bonus > 0:
       reward = reward + args.count_base_bonus / math.sqrt(hash_table.step(state, action))

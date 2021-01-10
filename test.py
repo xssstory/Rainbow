@@ -62,6 +62,31 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
   return avg_reward, avg_Q
 
 
+# Evaluate state visitation
+def eval_visitation(args, dqn, hash_table, env_class):
+  env = env_class(args, training=False)
+  T_rewards = []
+  T_steps = 0
+  # Test performance over several episodes
+  for _ in tqdm(range(args.evaluation_episodes)):
+    state, reward_sum, done = env.reset(), 0, False
+    for step in range(args.max_episode_length):
+      # action = dqn.act_e_greedy(state)  # Choose an action ε-greedily
+      action = dqn.act(state)
+      hash_table.step(state, action)
+      state, reward, done, _ = env.step(action)  # Step
+      T_steps += 1
+      reward_sum += reward
+      if args.render:
+        env.render()
+
+      if done:
+        T_rewards.append(reward_sum)
+        break
+  env.close()
+  return hash_table.table, T_steps
+
+
 # Plots min, max and mean + standard deviation bars of a population over time
 def _plot_line(xs, ys_population, title, path=''):
   max_colour, mean_colour, std_colour, transparent = 'rgb(0, 132, 180)', 'rgb(0, 172, 237)', 'rgba(29, 202, 255, 0.2)', 'rgba(0, 0, 0, 0)'
