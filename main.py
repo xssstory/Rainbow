@@ -221,6 +221,10 @@ else:
       mem.priority_weight = min(mem.priority_weight + priority_weight_increase, 1)  # Anneal importance sampling weight β to 1
 
       if args.deploy_policy == "reset":
+        if T % args.replay_frequency == 0:
+          dqn.learn(mem)
+          if args.memory is not None:
+            save_memory(mem, args.memory, args.disable_bzip_memory)
         # For reset deploy, it may happen when T mod replay-frequency != 0
         dqn.update_deploy_net(None, args, mem, is_reset=(T > 0 and done))
       else:
