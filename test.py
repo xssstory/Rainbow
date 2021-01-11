@@ -91,7 +91,7 @@ def eval_visitation(args, dqn, hash_table, env_class):
         T_rewards.append(reward_sum)
         break
   env.close()
-  return hash_table.table, T_steps, sum(T_rewards) / len(T_rewards)
+  return hash_table.table, T_steps, np.mean(T_rewards), np.std(T_rewards)
 
 
 # Plots min, max and mean + standard deviation bars of a population over time
