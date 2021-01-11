@@ -18,6 +18,7 @@ class Env():
     self.ale.setInt('frame_skip', 0)
     self.ale.setBool('color_averaging', False)
     self.ale.loadROM(atari_py.get_game_path(args.game))  # ROM loading must be done after setting options
+    self.game = args.game
     actions = self.ale.getMinimalActionSet()
     self.actions = dict([i, e] for i, e in zip(range(len(actions)), actions))
     self.lives = 0  # Life counter (used in DeepMind training)
@@ -38,6 +39,8 @@ class Env():
     if self.life_termination:
       self.life_termination = False  # Reset flag
       self.ale.act(0)  # Use a no-op after loss of life
+      if self.game == "breakout":
+        self.ale.act(1)
     else:
       # Reset internals
       self._reset_buffer()
@@ -47,6 +50,8 @@ class Env():
         self.ale.act(0)  # Assumes raw action 0 is always no-op
         if self.ale.game_over():
           self.ale.reset_game()
+      if self.game == "breakout":
+        self.ale.act(1)
     # Process and return "initial" state
     observation = self._get_state()
     self.state_buffer.append(observation)
@@ -69,11 +74,13 @@ class Env():
     observation = frame_buffer.max(0)[0]
     self.state_buffer.append(observation)
     # Detect loss of life as terminal in training mode
-    if self.training:
+    if self.training or self.game == "breakout":
       lives = self.ale.lives()
       if lives < self.lives and lives > 0:  # Lives > 0 for Q*bert
         self.life_termination = not done  # Only set flag when not truly done
         done = True
+        if not self.training:
+          done = False
       self.lives = lives
     # Return state, reward, done
     return torch.stack(list(self.state_buffer), 0), reward, done, {}
