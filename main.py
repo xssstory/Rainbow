@@ -46,7 +46,7 @@ parser.add_argument('--id', type=str, default='default', help='Experiment ID')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
-parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', 'q-value', 'dqn-feature-min','reset']
+parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', 'q-value', 'dqn-feature-min','reset'])
 parser.add_argument('--switch-memory-priority', default=True, type=eval)
 parser.add_argument('--switch-bsz', default=32, type=int)
 parser.add_argument('--switch-sample-strategy', default=None, choices=['uniform', 'recent'], type=str, help="only useful when switch-memory-priority is False")
