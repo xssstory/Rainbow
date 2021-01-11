@@ -151,7 +151,7 @@ if args.count_base_bonus > 0:
 
 # Agent
 dqn = Agent(args, env)
-if args.model:
+if args.model and args.count_base_bonus > 0:
   hash_table.load(os.path.dirname(args.model))
 
 # If a model is provided, and evaluate is fale, presumably we want to resume, so try to load memory
