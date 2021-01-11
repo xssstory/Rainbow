@@ -1,7 +1,7 @@
 CUDA_VISIBLE_DEVICES=$1 python main.py \
 	--id=$0.$2.out \
 	--env-type=atari \
-	--game=riverraid \
+	--game=road_runner \
 	--deploy-policy=dqn-feature \
 	--feature-threshold=0.98 \
         --seed=$2 \

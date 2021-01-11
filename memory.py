@@ -139,6 +139,23 @@ class ReplayMemory():
     nonterminal = torch.tensor([transition[self.history + self.n - 1].nonterminal], dtype=torch.float32, device=self.device)
 
     return prob, idx, tree_idx, state, action, R, next_state, nonterminal
+  
+  def _get_sample_from_idx(self, idx):
+
+    tree_idx = (idx % self.transitions.size) + self.transitions.size - 1
+    # Retrieve all required transition data (from t - h to t + n)
+    transition = self._get_transition(idx)
+    # Create un-discretised state and nth next state
+    state = torch.stack([trans.state for trans in transition[:self.history]]).to(device=self.device).to(dtype=torch.float32).div_(255)
+    next_state = torch.stack([trans.state for trans in transition[self.n:self.n + self.history]]).to(device=self.device).to(dtype=torch.float32).div_(255)
+    # Discrete action to be used as index
+    action = torch.tensor([transition[self.history - 1].action], dtype=torch.int64, device=self.device)
+    # Calculate truncated n-step discounted return R^n = Σ_k=0->n-1 (γ^k)R_t+k+1 (note that invalid nth next states have reward 0)
+    R = torch.tensor([sum(self.discount ** n * transition[self.history + n - 1].reward for n in range(self.n))], dtype=torch.float32, device=self.device)
+    # Mask for non-terminal nth next states
+    nonterminal = torch.tensor([transition[self.history + self.n - 1].nonterminal], dtype=torch.float32, device=self.device)
+
+    return idx, tree_idx, state, action, R, next_state, nonterminal
 
   def sample(self, batch_size):
     p_total = self.transitions.total()  # Retrieve sum of all priorities (used to create a normalised probability distribution)
@@ -153,6 +170,34 @@ class ReplayMemory():
     weights = torch.tensor(weights / weights.max(), dtype=torch.float32, device=self.device)  # Normalise by max importance-sampling weight from batch
     return tree_idxs, states, actions, returns, next_states, nonterminals, weights
 
+  def _sample_from_idxs(self, idxs):
+    batch = [self._get_sample_from_idx(i) for i in idxs]  # Get batch of valid samples
+    idxs, tree_idxs, states, actions, returns, next_states, nonterminals = zip(*batch)
+    states, next_states, = torch.stack(states), torch.stack(next_states)
+    actions, returns, nonterminals = torch.cat(actions), torch.cat(returns), torch.stack(nonterminals)
+
+    return tree_idxs, states, actions, returns, next_states, nonterminals, None
+  
+  def uniform_sample(self, batch_size):
+    idxs = np.random.choice(self.transitions.size, batch_size)
+    return self._sample_from_idxs(idxs)
+
+  def sample_recent(self, batch_size):
+    latest_idx = self.transitions.index - self.n
+    latest_idx = latest_idx + self.transitions.size if latest_idx - batch_size < 0 else latest_idx
+    idxs = np.arange(latest_idx - batch_size, latest_idx)
+    return self._sample_from_idxs(idxs)
+  
+  def uniform_sample_from_recent(self, batch_size, sample_length):
+    assert sample_length <= self.transitions.size 
+    latest_idx = self.transitions.index - self.n
+    if self.transitions.data[self.transitions.index] is None:
+      low = max(self.n, self.transitions.index - sample_length)
+      idxs = np.random.randint(low=low, high=latest_idx, size=batch_size)
+    else:
+      latest_idx = latest_idx + self.transitions.size if latest_idx - sample_length < 0 else latest_idx
+      idxs = np.random.randint(low=latest_idx - sample_length, high=latest_idx, size=batch_size)
+    return self._sample_from_idxs(idxs)
 
   def update_priorities(self, idxs, priorities):
     priorities = np.power(priorities, self.priority_exponent)

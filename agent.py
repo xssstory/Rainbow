@@ -156,7 +156,16 @@ class Agent():
     else:
       # if T % args.delploy_interval != 0:
       #   return
-      idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample(self.batch_size)
+      if args.switch_memory_priority:
+        idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample(args.switch_bsz)
+      else:
+        if args.switch_sample_strategy == "recent":
+          idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample_recent(args.switch_bsz)
+        elif args.switch_sample_strategy == "uniform":
+          idxs, states, actions, returns, next_states, nonterminals, weights = mem.uniform_sample_from_recent(args.switch_bsz, args.switch_memory_capcacity)
+        else:
+          raise RuntimeError("switch_sample_strategy {} is not supported !".format(args.switch_sample_strategy))
+
       if self.deploy_policy == 'dqn-feature' or self.deploy_policy == 'dqn-feature-min':
         if self.deploy_policy == "dqn-feature-min":
           if self.cur_interval < self.min_interval:

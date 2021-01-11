@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=$1 python main.py \
-	--id=qbert.deploy_dqn_f0.98_count_seed_$2 \
+	--id=$0.$2.out \
 	--env-type=atari \
 	--game=qbert \
 	--deploy-policy=dqn-feature \
