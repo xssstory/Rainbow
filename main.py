@@ -14,7 +14,7 @@ from tqdm import trange
 from agent import Agent
 from env import Env, WhyNotEnv
 from memory import ReplayMemory
-from test import test
+from test import test, eval_visitation
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), 'gym-sepsis'))
@@ -46,7 +46,7 @@ parser.add_argument('--id', type=str, default='default', help='Experiment ID')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
-parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', 'q-value', 'dqn-feature-min'])
+parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', 'q-value', 'dqn-feature-min','reset']
 parser.add_argument('--switch-memory-priority', default=True, type=eval)
 parser.add_argument('--switch-bsz', default=32, type=int)
 parser.add_argument('--switch-sample-strategy', default=None, choices=['uniform', 'recent'], type=str, help="only useful when switch-memory-priority is False")
@@ -86,6 +86,7 @@ parser.add_argument('--learn-start', type=int, default=int(20e3), metavar='STEPS
 parser.add_argument('--evaluate', action='store_true', help='Evaluate only')
 parser.add_argument('--evaluation-interval', type=int, default=10000, metavar='STEPS', help='Number of training steps between evaluations')
 parser.add_argument('--evaluation-episodes', type=int, default=10, metavar='N', help='Number of evaluation episodes to average over')
+parser.add_argument('--state-visitation-episodes', type=int, default=10, help='Number of evaluation episodes to measure state visitation')
 parser.add_argument('--result-dir', default='results/', type=str)
 # TODO: Note that DeepMind's evaluation method is running the latest agent for 500K frames ever every 1M steps
 parser.add_argument('--evaluation-size', type=int, default=500, metavar='N', help='Number of transitions to use for validating Q')
@@ -109,7 +110,8 @@ with open(os.path.join(results_dir, 'params.txt'), 'w') as f:
   for k, v in vars(args).items():
     f.write(' ' * 26 + k + ': ' + str(v) + '\n')
 
-metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf'), 'nums_deploy': []}
+metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf'), 'nums_deploy': [],
+           'episode_length': [], 'episode_reward': []}
 np.random.seed(args.seed)
 torch.manual_seed(np.random.randint(1, 10000))
 if torch.cuda.is_available() and not args.disable_cuda:
@@ -184,21 +186,36 @@ while T < args.evaluation_size:
 
 if args.evaluate:
   dqn.eval()  # Set DQN (online network) to evaluation mode
-  avg_reward, avg_Q = test(args, 0, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type], evaluate=True)  # Test
-  print('Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q))
+  # avg_reward, avg_Q = test(args, 0, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type], evaluate=True)  # Test
+  # print('Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q))
+  eval_hash_table = HashTable(args)
+  state_visitation, total_steps, avg_reward = eval_visitation(args, dqn, eval_hash_table, ENV_DIC[args.env_type])
+  print("Avg. reward:", avg_reward, "Total steps", total_steps)
+  # TODO: measure entropy? number of visited states?
+  print("Number of visited states", len(state_visitation))
+  visit_freq = np.asarray(list(state_visitation.values())) / total_steps
+  print("Visitation frequency", visit_freq)
+  state_dist_entropy = np.sum(-visit_freq * np.log(visit_freq))
+  print("Entropy", state_dist_entropy)
 else:
   # Training loop
   dqn.train()
   T, done = 0, True
+  episode_length, episode_reward = 0, 0
   for T in trange(1, args.T_max + 1):
     if done:
       state, done = env.reset(), False
+      metrics['episode_length'].append(episode_length)
+      metrics['episode_reward'].append(episode_reward)
+      episode_length, episode_reward = 0, 0
 
     if T % args.replay_frequency == 0:
       dqn.reset_noise()  # Draw a new set of noisy weights
 
     action = dqn.act(state)  # Choose an action greedily (with noisy weights)
     next_state, reward, done, _ = env.step(action)  # Step
+    episode_reward += reward
+    episode_length += 1
     if args.count_base_bonus > 0:
       reward = reward + args.count_base_bonus / math.sqrt(hash_table.step(state, action))
 
@@ -218,12 +235,20 @@ else:
 
       mem.priority_weight = min(mem.priority_weight + priority_weight_increase, 1)  # Anneal importance sampling weight β to 1
 
-      if T % args.replay_frequency == 0:
-        dqn.learn(mem)  # Train with n-step distributional double-Q learning
-        dqn.update_deploy_net(T // args.replay_frequency, args, mem)
-        # If memory path provided, save it
-        if args.memory is not None:
-          save_memory(mem, args.memory, args.disable_bzip_memory)
+      if args.deploy_policy == "reset":
+        if T % args.replay_frequency == 0:
+          dqn.learn(mem)
+          if args.memory is not None:
+            save_memory(mem, args.memory, args.disable_bzip_memory)
+        # For reset deploy, it may happen when T mod replay-frequency != 0
+        dqn.update_deploy_net(None, args, mem, is_reset=(T > 0 and done))
+      else:
+        if T % args.replay_frequency == 0:
+          dqn.learn(mem)  # Train with n-step distributional double-Q learning
+          dqn.update_deploy_net(T // args.replay_frequency, args, mem)
+          # If memory path provided, save it
+          if args.memory is not None:
+            save_memory(mem, args.memory, args.disable_bzip_memory)
 
       # Update target network
       if T % args.target_update == 0:
