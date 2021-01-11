@@ -6,6 +6,7 @@ from plotly.graph_objs import Scatter
 from plotly.graph_objs.scatter import Line
 import torch
 from tqdm import tqdm
+import numpy as np
 
 from env import Env
 
@@ -81,12 +82,14 @@ def eval_visitation(args, dqn, hash_table, env_class):
       reward_sum += reward
       if args.render:
         env.render()
-
+      if env.life_termination and args.game == "breakout":
+        env.ale.act(1)
+        env.life_termination = False
       if done:
         T_rewards.append(reward_sum)
         break
   env.close()
-  return hash_table.table, T_steps, sum(T_rewards) / len(T_rewards)
+  return hash_table.table, T_steps, np.mean(T_rewards), np.std(T_rewards)
 
 
 # Plots min, max and mean + standard deviation bars of a population over time
