@@ -68,7 +68,7 @@ def eval_visitation(args, dqn, hash_table, env_class):
   T_rewards = []
   T_steps = 0
   # Test performance over several episodes
-  for _ in tqdm(range(args.evaluation_episodes)):
+  for _ in tqdm(range(args.state_visitation_episodes)):
     state, reward_sum, done = env.reset(), 0, False
     for step in range(args.max_episode_length):
       # action = dqn.act_e_greedy(state)  # Choose an action ε-greedily
@@ -84,7 +84,7 @@ def eval_visitation(args, dqn, hash_table, env_class):
         T_rewards.append(reward_sum)
         break
   env.close()
-  return hash_table.table, T_steps
+  return hash_table.table, T_steps, sum(T_rewards) / len(T_rewards)
 
 
 # Plots min, max and mean + standard deviation bars of a population over time

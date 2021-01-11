@@ -18,7 +18,6 @@ from test import test, eval_visitation
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), 'gym-sepsis'))
-# sys.path.append("/home/yunfei/projects/Rainbow/gym-sepsis")
 from gym_sepsis.envs.sepsis_env import SepsisEnv
 
 from hash_count import HashTable
@@ -184,14 +183,16 @@ while T < args.evaluation_size:
 
 if args.evaluate:
   dqn.eval()  # Set DQN (online network) to evaluation mode
-  avg_reward, avg_Q = test(args, 0, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type], evaluate=True)  # Test
-  print('Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q))
+  # avg_reward, avg_Q = test(args, 0, dqn, val_mem, metrics, results_dir, ENV_DIC[args.env_type], evaluate=True)  # Test
+  # print('Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q))
   eval_hash_table = HashTable(args)
-  state_visitation, total_steps = eval_visitation(args, dqn, eval_hash_table, ENV_DIC[args.env_type])
+  state_visitation, total_steps, avg_reward = eval_visitation(args, dqn, eval_hash_table, ENV_DIC[args.env_type])
+  print("Avg. reward:", avg_reward, "Total steps", total_steps)
   # TODO: measure entropy? number of visited states?
   print("Number of visited states", len(state_visitation))
-  visit_freq = np.asarray(state_visitation.values()) / total_steps
-  state_dist_entropy = np.sum(-visit_freq * np.logp(visit_freq))
+  visit_freq = np.asarray(list(state_visitation.values())) / total_steps
+  print("Visitation frequency", visit_freq)
+  state_dist_entropy = np.sum(-visit_freq * np.log(visit_freq))
   print("Entropy", state_dist_entropy)
 else:
   # Training loop
