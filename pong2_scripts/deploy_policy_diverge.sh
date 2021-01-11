@@ -1,0 +1,13 @@
+CUDA_VISIBLE_DEVICES=$1 python main.py \
+	--id=pong.deploy_diverge_count_seed_$2 \
+	--env-type=atari \
+	--game=pong \
+	--count-base-bonus=0.01 \
+        --seed=$2 \
+	--deploy-policy=policy_diverge \
+	--switch-memory-priority=1 \
+	--switch-sample-strategy=recent \
+	--switch-memory-capcacity=1000000 \
+	--switch-bsz=64 \
+	--diverge-threshold=0.2 \
+	--checkpoint-interval=100000

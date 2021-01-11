@@ -8,6 +8,7 @@ from torch.nn import functional as F
 from torch.nn.utils import clip_grad_norm_
 import copy
 import math
+from collections import deque
 
 from model import DQN, SepsisDqn
 DQN_DIC = {
@@ -34,6 +35,8 @@ class Agent():
     if self.deploy_policy == 'exp':
       self.exponent = 0
       self.exp_base = args.exp_base
+    if self.deploy_policy == "policy_diverge":
+      self.ratio = deque(maxlen=100)
     if self.deploy_policy and self.deploy_policy.endswith('-min'):
       if isinstance(args.min_interval, int):
         self.min_interval = args.min_interval
@@ -202,7 +205,24 @@ class Agent():
             self.deploy_net.load_state_dict(self.online_net.state_dict())
             self.num_deploy += 1
         self.train()
-      elif self.deploy_policy == 'policy' or self.deploy_policy == 'policy-adapted':
+      elif self.deploy_policy == 'policy_diverge':
+        self.eval()
+        with torch.no_grad():
+          deploy_q = (self.deploy_net(states) * self.support).sum(2)  # (batch_size, action_dim)
+          online_q = (self.online_net(states) * self.support).sum(2)
+          deploy_dist = torch.distributions.categorical.Categorical(probs=torch.exp(deploy_q))
+          online_dist = torch.distributions.categorical.Categorical(probs=torch.exp(online_q))
+          new_action = online_q.argmax(1)  # (batch_size,)
+          # p(action|new policy) / p(action|deploy policy)
+          logp = online_dist.log_prob(new_action)  # (batch_size,)
+          old_logp = deploy_dist.log_prob(new_action)
+          ratio = torch.exp(logp - old_logp)
+          self.ratio.append(ratio.mean().item())
+          if torch.abs(ratio.mean() - 1) > args.diverge_threshold:
+            self.deploy_net.load_state_dict(self.online_net.state_dict())
+            self.num_deploy += 1
+      # Old version.
+      elif self.deploy_policy == 'policy' or self.deploy_policy == 'policy_adapt':
         self.eval()
         with torch.no_grad():
           deploy_action = (self.deploy_net(states) * self.support).sum(2).argmax(1)

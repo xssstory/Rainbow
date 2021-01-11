@@ -6,6 +6,7 @@ from plotly.graph_objs import Scatter
 from plotly.graph_objs.scatter import Line
 import torch
 from tqdm import tqdm
+import numpy as np
 
 from env import Env
 
@@ -15,6 +16,8 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
   env = env_class(args, training=False)
   metrics['steps'].append(T)
   metrics['nums_deploy'].append(dqn.num_deploy)
+  if hasattr(dqn, "ratio"):
+    print("mean ratio", np.mean(dqn.ratio))
   T_rewards, T_Qs = [], []
 
   # Test performance over several episodes
@@ -81,7 +84,9 @@ def eval_visitation(args, dqn, hash_table, env_class):
       reward_sum += reward
       if args.render:
         env.render()
-
+      if env.life_termination and args.game == "breakout":
+        env.ale.act(1)
+        env.life_termination = False
       if done:
         T_rewards.append(reward_sum)
         break
