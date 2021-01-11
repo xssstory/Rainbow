@@ -196,12 +196,25 @@ class Agent():
       elif self.deploy_policy == 'q-value':
         self.eval()
         with torch.no_grad():
-          deploy_value = (self.deploy_net(states) * self.support).sum(2)[range(self.batch_size), actions]
-          online_value = (self.online_net(states) * self.support).sum(2)[range(self.batch_size), actions]
+          deploy_value = (self.deploy_net(states) * self.support).sum(2)[range(args.switch_bsz), actions]
+          online_value = (self.online_net(states) * self.support).sum(2)[range(args.switch_bsz), actions]
           if (abs(deploy_value - online_value) / deploy_value.masked_fill(deploy_value==0, 1)).mean() > args.q_value_threshold:
             self.deploy_net.load_state_dict(self.online_net.state_dict())
             self.num_deploy += 1
         self.train()
+      elif self.deploy_policy == 'policy' or self.deploy_policy == 'policy-adapted':
+        self.eval()
+        with torch.no_grad():
+          deploy_action = (self.deploy_net(states) * self.support).sum(2).argmax(1)
+          online_action = (self.online_net(states) * self.support).sum(2).argmax(1)
+          diff = 1 - deploy_action.eq(online_action).sum().item() / args.switch_bsz
+          if diff > args.policy_diff_threshold:
+            if T - self.last_update_T > 1000 or self.deploy_policy == 'policy':
+              self.deploy_net.load_state_dict(self.online_net.state_dict())
+              self.num_deploy += 1
+              self.last_update_T = T
+        self.train()
+
 
   # Save model parameters on current device (don't move model between devices)
   def save(self, path, name='model.pth'):
