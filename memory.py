@@ -3,6 +3,7 @@ from __future__ import division
 from collections import namedtuple
 import numpy as np
 import torch
+import time
 
 
 Transition = namedtuple('Transition', ('timestep', 'state', 'action', 'reward', 'nonterminal'))
@@ -49,6 +50,38 @@ class SegmentTree():
       return self._retrieve(left, value)
     else:
       return self._retrieve(right, value - self.sum_tree[left])
+
+  def find_parallel(self, value):
+    if isinstance(value, float):
+      value = np.array([value])
+    # debug_value = value.copy()
+    assert 0 <= np.min(value)
+    assert np.max(value) <= self.sum_tree[0] + 1e-5
+    assert isinstance(value[0], float)
+    idx = np.zeros(len(value), dtype=int)
+    cont = np.ones(len(value), dtype=bool)
+
+    while np.any(cont):
+      idx[cont] = 2 * idx[cont] + 1
+      value_new = np.where(self.sum_tree[idx] <= value, value - self.sum_tree[idx], value)
+      idx = np.where(np.logical_or(self.sum_tree[idx] > value, np.logical_not(cont)), idx, idx + 1)
+      value = value_new
+      cont = idx < self.size - 1
+    index = idx
+    data_index = index - self.size + 1
+    # For debugging
+    '''
+    for i in range(debug_value.shape[0]):
+        debug_result = self.find(debug_value[i])
+        assert abs(debug_result[0] - self.sum_tree[index][i])<1e-5
+        assert abs(debug_result[1] - data_index[i]) < 1e-5
+        assert abs(debug_result[2] - index[i]) < 1e-5
+    '''
+    if len(data_index) == 1:
+        index = index[0]
+        data_index = data_index[0]
+    # print(debug_result, self.sum_tree[index], data_index, index)
+    return (self.sum_tree[index], data_index, index)
 
   # Searches for a value in sum tree and returns value, data index and tree index
   def find(self, value):
@@ -169,6 +202,119 @@ class ReplayMemory():
     weights = (capacity * probs) ** -self.priority_weight  # Compute importance-sampling weights w
     weights = torch.tensor(weights / weights.max(), dtype=torch.float32, device=self.device)  # Normalise by max importance-sampling weight from batch
     return tree_idxs, states, actions, returns, next_states, nonterminals, weights
+
+  def sample2(self, batch_size):
+    # import time
+    # start_time = time.time()
+    idxs, probs = self._sample_proportional(batch_size)
+    # print("batch size", batch_size, "sample tree time", time.time() - start_time)
+    p_total = self.transitions.total()
+    probs = np.array(probs, dtype=np.float32) / p_total  # Calculate normalised probabilities
+    capacity = self.capacity if self.transitions.full else self.transitions.index
+    weights = (capacity * probs) ** -self.priority_weight  # Compute importance-sampling weights w
+    weights = torch.tensor(weights / weights.max(), dtype=torch.float32,
+                           device=self.device)  # Normalise by max importance-sampling weight from batch
+    # start_time = time.time()
+    encoded_sample = self._encode_sample(idxs)
+    # print("batch size", batch_size, "encode sample time", time.time() - start_time)
+    # encoded_sample = self._sample_from_idxs(idxs)[:-1]
+    return tuple(list(encoded_sample) + [weights,])
+
+  # def _sample_proportional(self, batch_size):
+  #   p_total = self.transitions.total()
+  #   prefixs = np.random.uniform(size=batch_size) * p_total
+  #   idxs = []
+  #   probs = []
+  #   for i in range(batch_size):
+  #     prob, idx, _ = self.transitions.find(prefixs[i])
+  #     idxs.append(idx)
+  #     probs.append(prob)
+  #   return idxs, probs
+
+  def _sample_proportional(self, batch_size):
+    idxs, probs = [], []
+    p_total = self.transitions.total()
+    segment = p_total / batch_size
+    samples = np.random.uniform(0, segment, size=batch_size) + np.arange(batch_size) * segment
+    probs, idxs, tree_idxs = self.transitions.find_parallel(samples)
+    valid_idx = np.logical_and(np.logical_and((self.transitions.index - idxs) % self.capacity > self.n, 
+        (idxs - self.transitions.index) % self.capacity >= self.history), probs != 0)
+    # print(idxs[:10], self.transitions.index, self.capacity, self.n, self.history)
+    # print('original idx number', len(idxs), idxs)
+    # print('valid idx number', np.sum(valid_idx), valid_idx.shape)
+    probs = probs[valid_idx]
+    idxs = idxs[valid_idx]
+    if np.sum(valid_idx) < batch_size:
+        additional_idx = np.random.choice(np.arange(len(idxs)), batch_size - len(idxs))
+        probs = np.concatenate([probs, probs[additional_idx]])
+        idxs = np.concatenate([idxs, idxs[additional_idx]])
+    # print("valid idx", idxs, "number", idxs.shape)
+    assert idxs.shape[0] == batch_size
+    assert probs.shape[0] == batch_size
+    '''
+    for i in range(batch_size):
+      valid = False
+      num_fail = 0
+      while not valid:
+        if num_fail < 10:
+          sample = np.random.uniform(i * segment, (i + 1) * segment)  # Uniformly sample an element from within a segment
+        else:
+          sample = np.random.uniform(1, p_total)
+        prob, idx, tree_idx = self.transitions.find_parallel(sample)  # Retrieve sample from tree with un-normalised probability
+        # Resample if transition straddled current index or probablity 0
+        if (self.transitions.index - idx) % self.capacity > self.n and (
+                idx - self.transitions.index) % self.capacity >= self.history and prob != 0:
+          valid = True  # Note that conditions are valid but extra conservative around buffer index 0
+        else:
+          num_fail += 1
+      idxs.append(idx)
+      probs.append(prob)
+    '''
+    return idxs, probs
+
+  def _encode_sample(self, idxs):
+    states_buf, actions_buf, returns_buf, next_states_buf, nonterminals_buf = [], [], [], [], []
+    states_buf = torch.zeros(len(idxs), self.history, *self.transitions.get(0).state.shape).float().to(self.device)
+    next_states_buf = torch.zeros(len(idxs), self.history, *self.transitions.get(0).state.shape).float().to(self.device)
+    tree_idxs = ((np.asarray(idxs) % self.transitions.size) + self.transitions.size - 1).tolist()
+    duration = 0
+    duration_stack = 0
+    duration_create = 0
+    for i, idx in enumerate(idxs):
+      # start_time = time.time()
+      transition = self._get_transition(idx).tolist()
+      # duration += time.time() - start_time
+      _, states, actions, rewards, nonterminals = zip(*transition)
+      # start_time = time.time()
+      _state = torch.stack(states[:self.history]).float().to(self.device) / 255
+      _next_state = torch.stack(states[self.n: self.n + self.history]).float().to(self.device) / 255
+      states_buf[i] = _state
+      next_states_buf[i] = _next_state
+      # duration_stack += time.time() - start_time
+      _action = actions[self.history - 1]
+      _reward = np.sum(np.power(self.discount, np.arange(self.n)) * np.asarray(rewards[self.history: self.history + self.n]))
+      # start_time = time.time()
+      _nonterminal = torch.tensor([nonterminals[self.history + self.n - 1]]).float()
+      # duration_create = time.time() - start_time
+      # states_buf.append(_state)
+      actions_buf.append(_action)
+      returns_buf.append(_reward)
+      # next_states_buf.append(_next_state)
+      nonterminals_buf.append(_nonterminal)
+    # start_time = time.time()
+    # states_buf = torch.stack(states_buf).to(self.device)
+    # duration_stack += time.time() - start_time
+    # start_time = time.time()
+    actions_buf = torch.from_numpy(np.asarray(actions_buf).astype(np.int)).to(self.device)
+    returns_buf = torch.from_numpy(np.asarray(returns_buf)).float().to(self.device)
+    # duration_create += time.time() - start_time
+    # start_time = time.time()
+    # next_states_buf = torch.stack(next_states_buf).to(self.device)
+    # duration_stack += time.time() - start_time
+    nonterminals_buf = torch.stack(nonterminals_buf).to(self.device)
+    # print("get transition time", duration, "stack time", duration_stack, "create time", duration_create)
+    # print(states_buf.shape, actions_buf.shape, returns_buf.shape, next_states_buf.shape, nonterminals_buf.shape)
+    return tree_idxs, states_buf, actions_buf, returns_buf, next_states_buf, nonterminals_buf
 
   def _sample_from_idxs(self, idxs):
     batch = [self._get_sample_from_idx(i) for i in idxs]  # Get batch of valid samples

@@ -9,6 +9,7 @@ from torch.nn.utils import clip_grad_norm_
 import copy
 import math
 from collections import deque
+import time
 
 from model import DQN, SepsisDqn
 DQN_DIC = {
@@ -46,6 +47,7 @@ class Agent():
         self.min_interval = int(args.min_interval.split('.')[-1])
         self.min_interval_update = self.min_interval
       self.cur_interval = 0
+    self.last_update_T = 0
 
     self.deploy_net = self.dqn_model(args, self.action_space).to(device=args.device)
     if args.model:  # Load pretrained model if provided
@@ -159,8 +161,9 @@ class Agent():
     else:
       # if T % args.delploy_interval != 0:
       #   return
+      # start_time = time.time()
       if args.switch_memory_priority:
-        idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample(args.switch_bsz)
+        idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample2(args.switch_bsz)
       else:
         if args.switch_sample_strategy == "recent":
           idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample_recent(args.switch_bsz)
@@ -168,6 +171,8 @@ class Agent():
           idxs, states, actions, returns, next_states, nonterminals, weights = mem.uniform_sample_from_recent(args.switch_bsz, args.switch_memory_capcacity)
         else:
           raise RuntimeError("switch_sample_strategy {} is not supported !".format(args.switch_sample_strategy))
+      # sample_time = time.time() - start_time
+      # print("sample time", sample_time)
 
       if self.deploy_policy == 'dqn-feature' or self.deploy_policy == 'dqn-feature-min':
         if self.deploy_policy == "dqn-feature-min":
@@ -205,11 +210,14 @@ class Agent():
             self.deploy_net.load_state_dict(self.online_net.state_dict())
             self.num_deploy += 1
         self.train()
-      elif self.deploy_policy == 'policy_diverge':
+      elif self.deploy_policy == 'policy_diverge' and T % 8 == 0:
         self.eval()
         with torch.no_grad():
+          # start_time = time.time()
           deploy_q = (self.deploy_net(states) * self.support).sum(2)  # (batch_size, action_dim)
           online_q = (self.online_net(states) * self.support).sum(2)
+          # forward_time = time.time() - start_time
+          # print("forward time", forward_time)
           deploy_dist = torch.distributions.categorical.Categorical(probs=torch.exp(deploy_q))
           online_dist = torch.distributions.categorical.Categorical(probs=torch.exp(online_q))
           new_action = online_q.argmax(1)  # (batch_size,)
@@ -218,9 +226,11 @@ class Agent():
           old_logp = deploy_dist.log_prob(new_action)
           ratio = torch.exp(logp - old_logp)
           self.ratio.append(ratio.mean().item())
-          if torch.abs(ratio.mean() - 1) > args.diverge_threshold:
+          if torch.abs(ratio.mean() - 1) > args.diverge_threshold or T - self.last_update_T > 1000:
             self.deploy_net.load_state_dict(self.online_net.state_dict())
             self.num_deploy += 1
+            self.last_update_T = T
+        self.train()
       # Old version.
       elif self.deploy_policy == 'policy' or self.deploy_policy == 'policy_adapt':
         self.eval()
