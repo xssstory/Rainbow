@@ -1,0 +1,14 @@
+CUDA_VISIBLE_DEVICES=$1 python main.py \
+	--id=pong.deploy_policy_diffthreshold$3_uniform1e4_bsz512_count_seed_$2 \
+	--env-type=atari \
+	--game=pong \
+	--count-base-bonus=0.01 \
+        --seed=$2 \
+	--deploy-policy=policy \
+	--switch-memory-priority=0 \
+	--switch-sample-strategy=uniform \
+	--switch-memory-capcacity=10000 \
+	--switch-bsz=512 \
+	--policy-diff-threshold=$3 \
+        --result-dir=/pvc/rainbow_lyf/results \
+	--checkpoint-interval=100000

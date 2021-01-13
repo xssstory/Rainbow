@@ -250,7 +250,12 @@ else:
       else:
         if T % args.replay_frequency == 0:
           dqn.learn(mem)  # Train with n-step distributional double-Q learning
-          dqn.update_deploy_net(T // args.replay_frequency, args, mem)
+          if (args.deploy_policy == "policy" or args.deploy_policy == "policy_diverge"):
+              if T % (args.replay_frequency * 8) == 0:
+                  dqn.update_deploy_net(T // args.replay_frequency, args, mem)
+          else:
+              dqn.update_deploy_net(T // args.replay_frequency, args, mem)
+          
           # If memory path provided, save it
           if args.memory is not None:
             save_memory(mem, args.memory, args.disable_bzip_memory)
