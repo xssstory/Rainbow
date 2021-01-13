@@ -210,7 +210,7 @@ class Agent():
             self.deploy_net.load_state_dict(self.online_net.state_dict())
             self.num_deploy += 1
         self.train()
-      elif self.deploy_policy == 'policy_diverge' and T % 8 == 0:
+      elif self.deploy_policy == 'policy_diverge':
         self.eval()
         with torch.no_grad():
           # start_time = time.time()
@@ -231,7 +231,7 @@ class Agent():
             self.num_deploy += 1
             self.last_update_T = T
         self.train()
-      elif self.deploy_policy == 'policy' and T % 8 == 0:
+      elif self.deploy_policy == 'policy':
         self.eval()
         with torch.no_grad():
           deploy_action = (self.deploy_net(states) * self.support).sum(2).argmax(1)
