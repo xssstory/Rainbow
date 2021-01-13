@@ -231,18 +231,17 @@ class Agent():
             self.num_deploy += 1
             self.last_update_T = T
         self.train()
-      # Old version.
-      elif self.deploy_policy == 'policy' or self.deploy_policy == 'policy_adapt':
+      elif self.deploy_policy == 'policy' and T % 8 == 0:
         self.eval()
         with torch.no_grad():
           deploy_action = (self.deploy_net(states) * self.support).sum(2).argmax(1)
           online_action = (self.online_net(states) * self.support).sum(2).argmax(1)
           diff = 1 - deploy_action.eq(online_action).sum().item() / args.switch_bsz
           if diff > args.policy_diff_threshold:
-            if T - self.last_update_T > 1000 or self.deploy_policy == 'policy':
-              self.deploy_net.load_state_dict(self.online_net.state_dict())
-              self.num_deploy += 1
-              self.last_update_T = T
+            # if T - self.last_update_T > 1000 or self.deploy_policy == 'policy':
+            self.deploy_net.load_state_dict(self.online_net.state_dict())
+            self.num_deploy += 1
+            self.last_update_T = T
         self.train()
 
 
