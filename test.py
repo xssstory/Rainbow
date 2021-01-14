@@ -18,6 +18,9 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
   metrics['nums_deploy'].append(dqn.num_deploy)
   if hasattr(dqn, "ratio"):
     print("mean ratio", np.mean(dqn.ratio))
+  if hasattr(dqn, "action_diff"):
+    print("mean action diff", np.mean(dqn.action_diff))
+    metrics['action_diff'] = np.mean(dqn.action_diff)
   T_rewards, T_Qs = [], []
 
   # Test performance over several episodes
