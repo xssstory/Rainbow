@@ -106,6 +106,9 @@ print(' ' * 26 + 'Options')
 for k, v in vars(args).items():
   print(' ' * 26 + k + ': ' + str(v))
 results_dir = os.path.join(args.result_dir, args.id)
+if os.path.exists(results_dir):
+  print("Warning: %s already exists!" % results_dir)
+  exit()
 if not os.path.exists(results_dir):
   os.makedirs(results_dir)
 
