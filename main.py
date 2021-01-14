@@ -147,6 +147,9 @@ def save_memory(memory, memory_path, disable_bzip):
     with bz2.open(memory_path, 'wb') as zipped_pickle_file:
       pickle.dump(memory, zipped_pickle_file)
 
+# Shorten episode if deploy policy is reset
+if args.deploy_policy == "reset_policy" or args.deploy_policy == "reset_feature":
+  args.max_episode_length = 10000
 
 # Environment
 env = ENV_DIC[args.env_type](args)
@@ -208,6 +211,9 @@ else:
   T, done = 0, True
   episode_length, episode_reward = 0, 0
   for T in trange(1, args.T_max + 1):
+    if T > 4000000:
+      print("Terminate after 4M steps!")
+      break
     if done:
       state, done = env.reset(), False
       metrics['episode_length'].append(episode_length)
