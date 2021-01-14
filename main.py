@@ -46,7 +46,7 @@ parser.add_argument('--id', type=str, default='default', help='Experiment ID')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
-parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', 'q-value', 'dqn-feature-min',
+parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', "reset_feature", 'q-value', 'dqn-feature-min',
                                                               'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy'])
 parser.add_argument('--switch-memory-priority', default=True, type=eval)
 parser.add_argument('--switch-bsz', default=32, type=int)
@@ -247,7 +247,7 @@ else:
             save_memory(mem, args.memory, args.disable_bzip_memory)
         # For reset deploy, it may happen when T mod replay-frequency != 0
         dqn.update_deploy_net(None, args, mem, is_reset=(T > 0 and done))
-      elif args.deploy_policy == "reset_policy":
+      elif args.deploy_policy in ["reset_policy", "reset_feature"]:
         if T % args.replay_frequency == 0:
           dqn.learn(mem)
           if args.memory is not None:
@@ -257,7 +257,7 @@ else:
       else:
         if T % args.replay_frequency == 0:
           dqn.learn(mem)  # Train with n-step distributional double-Q learning
-          if (args.deploy_policy == "policy" or args.deploy_policy == "policy_diverge"):
+          if (args.deploy_policy in ["policy", "policy_diverge", "dqn-feature"]):
               if T % (args.replay_frequency * 8) == 0:
                   dqn.update_deploy_net(T // args.replay_frequency, args, mem)
           else:

@@ -176,7 +176,7 @@ class Agent():
       # sample_time = time.time() - start_time
       # print("sample time", sample_time)
 
-      if self.deploy_policy == 'dqn-feature' or self.deploy_policy == 'dqn-feature-min':
+      if self.deploy_policy in ['dqn-feature', 'reset_feature', 'dqn-feature-min']:
         if self.deploy_policy == "dqn-feature-min":
           if self.cur_interval < self.min_interval:
             self.cur_interval += 1
