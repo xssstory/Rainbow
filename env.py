@@ -13,7 +13,10 @@ class Env():
     self.ale = atari_py.ALEInterface()
     seed = args.seed if training else args.seed + 1 # different seeds for training and evaluation
     self.ale.setInt('random_seed', seed)
-    self.ale.setInt('max_num_frames_per_episode', args.max_episode_length)
+    if training:
+      self.ale.setInt('max_num_frames_per_episode', args.max_episode_length)
+    else:
+      self.ale.setInt('max_num_frames_per_episode', 108e3)
     self.ale.setFloat('repeat_action_probability', 0)  # Disable sticky actions
     self.ale.setInt('frame_skip', 0)
     self.ale.setBool('color_averaging', False)

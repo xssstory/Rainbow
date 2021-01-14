@@ -48,6 +48,8 @@ parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
 parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', "reset_feature", 'q-value', 'dqn-feature-min',
                                                               'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy'])
+parser.add_argument('--record-action-diff', default=False, action="store_true")
+parser.add_argument('--record-feature-sim', default=False, action="store_true")
 parser.add_argument('--switch-memory-priority', default=True, type=eval)
 parser.add_argument('--switch-bsz', default=32, type=int)
 parser.add_argument('--switch-sample-strategy', default=None, choices=['uniform', 'recent'], type=str, help="only useful when switch-memory-priority is False")
@@ -114,7 +116,7 @@ with open(os.path.join(results_dir, 'params.txt'), 'w') as f:
     f.write(' ' * 26 + k + ': ' + str(v) + '\n')
 
 metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf'), 'nums_deploy': [],
-           'episode_length': [], 'episode_reward': [], 'action_diff': []}
+           'episode_length': [], 'episode_reward': [], 'action_diff': [], "feature_sim": []}
 np.random.seed(args.seed)
 torch.manual_seed(np.random.randint(1, 10000))
 if torch.cuda.is_available() and not args.disable_cuda:

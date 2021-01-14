@@ -20,14 +20,17 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
     print("mean ratio", np.mean(dqn.ratio))
   if hasattr(dqn, "action_diff"):
     print("mean action diff", np.mean(dqn.action_diff))
-    metrics['action_diff'] = np.mean(dqn.action_diff)
+    metrics['action_diff'].append(np.mean(dqn.action_diff))
+  if hasattr(dqn, "feature_sim"):
+    print("mean feature sim", np.mean(dqn.feature_sim))
+    metrics['feature_sim'].append(np.mean(dqn.feature_sim))
   T_rewards, T_Qs = [], []
 
   # Test performance over several episodes
   done = True
   for _ in tqdm(range(args.evaluation_episodes)):
     state, reward_sum, done = env.reset(), 0, False
-    for step in range(args.max_episode_length): 
+    for step in range(int(108e3)): 
       
       # action = dqn.act_e_greedy(state)  # Choose an action ε-greedily
       action = dqn.act(state)

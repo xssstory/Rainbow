@@ -38,8 +38,10 @@ class Agent():
       self.exp_base = args.exp_base
     if self.deploy_policy == "policy_diverge":
       self.ratio = deque(maxlen=100)
-    if self.deploy_policy == "policy" or self.deploy_policy == "reset_policy":
+    if self.deploy_policy == "policy" or self.deploy_policy == "reset_policy" or args.record_action_diff:
       self.action_diff = deque(maxlen=100)
+    if self.deploy_policy in ['dqn-feature', 'reset_feature', 'dqn-feature-min'] or args.record_feature_sim:
+      self.feature_sim = deque(maxlen=100)
     if self.deploy_policy and self.deploy_policy.endswith('-min'):
       if isinstance(args.min_interval, int):
         self.min_interval = args.min_interval
@@ -150,6 +152,21 @@ class Agent():
       assert self.deploy_net is not self.online_net
       self.deploy_net.load_state_dict(self.online_net.state_dict())
       self.num_deploy += 1
+      if hasattr(self, "action_diff") or hasattr(self, "feature_sim"):
+        idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample_recent(args.switch_bsz)
+      if hasattr(self, "action_diff"):
+        deploy_action = (self.deploy_net(states) * self.support).sum(2).argmax(1)
+        online_action = (self.online_net(states) * self.support).sum(2).argmax(1)
+        diff = 1 - deploy_action.eq(online_action).sum().item() / args.switch_bsz
+        self.action_diff.append(diff)
+      if hasattr(self, "feature_sim"):
+        deploy_feature2 = self.deploy_net.extract(states).detach()
+        online_feature2 = self.online_net.extract(states).detach()
+        deploy_feature2 = F.normalize(deploy_feature2)
+        online_feature2 = F.normalize(online_feature2)
+        sim2 = deploy_feature2.mm(online_feature2.T)
+        sim = sim2.diagonal().mean()
+        self.feature_sim.append(sim)
     elif self.deploy_policy == 'exp':
       if (T - args.learn_start // args.replay_frequency) >= self.exp_base ** self.exponent:
         assert self.deploy_net is not self.online_net
