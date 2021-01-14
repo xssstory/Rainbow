@@ -1,0 +1,11 @@
+CUDA_VISIBLE_DEVICES=$1 python main.py \
+	--id=$0.$2 \
+	--env-type=atari \
+	--game=pong \
+	--count-base-bonus=0.01 \
+        --seed=$2 \
+    --record-action-diff \
+    --record-feature-sim \
+	--deploy-policy=fixed \
+	--delploy-interval=100 \
+	--checkpoint-interval=100000 
