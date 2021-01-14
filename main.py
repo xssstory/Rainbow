@@ -3,7 +3,7 @@ from __future__ import division
 import argparse
 import bz2
 from datetime import datetime
-import os
+import os, shutil
 import pickle
 
 import atari_py
@@ -110,7 +110,12 @@ for k, v in vars(args).items():
 results_dir = os.path.join(args.result_dir, args.id)
 if os.path.exists(results_dir):
   print("Warning: %s already exists!" % results_dir)
-  exit()
+  r = input("Do you want to remove %s? [Y] " % results_dir)
+  if r == "Y":
+    shutil.rmtree(results_dir)
+  else:
+    print("Keep the directory and exit.")
+    exit()
 if not os.path.exists(results_dir):
   os.makedirs(results_dir)
 
