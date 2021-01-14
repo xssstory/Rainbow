@@ -47,7 +47,7 @@ parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
 parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', 'q-value', 'dqn-feature-min',
-                                                              'reset', 'policy', 'policy_adapt', 'policy_diverge'])
+                                                              'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy'])
 parser.add_argument('--switch-memory-priority', default=True, type=eval)
 parser.add_argument('--switch-bsz', default=32, type=int)
 parser.add_argument('--switch-sample-strategy', default=None, choices=['uniform', 'recent'], type=str, help="only useful when switch-memory-priority is False")
@@ -114,7 +114,7 @@ with open(os.path.join(results_dir, 'params.txt'), 'w') as f:
     f.write(' ' * 26 + k + ': ' + str(v) + '\n')
 
 metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf'), 'nums_deploy': [],
-           'episode_length': [], 'episode_reward': []}
+           'episode_length': [], 'episode_reward': [], 'action_diff': []}
 np.random.seed(args.seed)
 torch.manual_seed(np.random.randint(1, 10000))
 if torch.cuda.is_available() and not args.disable_cuda:
@@ -247,6 +247,13 @@ else:
             save_memory(mem, args.memory, args.disable_bzip_memory)
         # For reset deploy, it may happen when T mod replay-frequency != 0
         dqn.update_deploy_net(None, args, mem, is_reset=(T > 0 and done))
+      elif args.deploy_policy == "reset_policy":
+        if T % args.replay_frequency == 0:
+          dqn.learn(mem)
+          if args.memory is not None:
+            save_memory(mem, args.memory, args.disable_bzip_memory)
+        if done:
+          dqn.update_deploy_net(None, args, mem)
       else:
         if T % args.replay_frequency == 0:
           dqn.learn(mem)  # Train with n-step distributional double-Q learning
