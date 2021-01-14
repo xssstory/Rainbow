@@ -167,7 +167,7 @@ class Agent():
           online_feature2 = F.normalize(online_feature2)
           sim2 = deploy_feature2.mm(online_feature2.T)
           sim = sim2.diagonal().mean()
-          self.feature_sim.append(sim)
+          self.feature_sim.append(sim.item())
     elif self.deploy_policy == 'exp':
       if (T - args.learn_start // args.replay_frequency) >= self.exp_base ** self.exponent:
         assert self.deploy_net is not self.online_net
@@ -210,7 +210,7 @@ class Agent():
           sim2 = deploy_feature2.mm(online_feature2.T)
           sim = sim2.diagonal().mean()
           if hasattr(self, "feature_sim"):
-            self.feature_sim.append(sim)
+            self.feature_sim.append(sim.item())
         #sim = np.dot(deploy_feature, online_feature.T) \
         #/(np.linalg.norm(deploy_feature, axis=1, keepdims=True)* np.linalg.norm(online_feature, axis=1, keepdims=True))
         #sim = sim.diagonal().mean()
