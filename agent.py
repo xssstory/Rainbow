@@ -150,9 +150,8 @@ class Agent():
       self.num_deploy += 1
     elif self.deploy_policy == 'fixed' and T % args.delploy_interval == 0:
       assert self.deploy_net is not self.online_net
-      self.deploy_net.load_state_dict(self.online_net.state_dict())
-      self.num_deploy += 1
       with torch.no_grad():
+        self.eval()
         if hasattr(self, "action_diff") or hasattr(self, "feature_sim"):
           idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample_recent(args.switch_bsz)
         if hasattr(self, "action_diff"):
@@ -168,6 +167,9 @@ class Agent():
           sim2 = deploy_feature2.mm(online_feature2.T)
           sim = sim2.diagonal().mean()
           self.feature_sim.append(sim.item())
+        self.train()
+      self.deploy_net.load_state_dict(self.online_net.state_dict())
+      self.num_deploy += 1
     elif self.deploy_policy == 'exp':
       if (T - args.learn_start // args.replay_frequency) >= self.exp_base ** self.exponent:
         assert self.deploy_net is not self.online_net
@@ -178,6 +180,9 @@ class Agent():
       if is_reset:
         self.deploy_net.load_state_dict(self.online_net.state_dict())
         self.num_deploy += 1
+    elif self.deploy_policy == "visited":
+      self.deploy_net.load_state_dict(self.online_net.state_dict())
+      self.num_deploy += 1
     else:
       # if T % args.delploy_interval != 0:
       #   return
