@@ -9,7 +9,6 @@ CUDA_VISIBLE_DEVICES=$1 python main.py \
 	--switch-sample-strategy=recent \
 	--switch-memory-capcacity=1000000 \
 	--switch-bsz=512 \
-	--learn-start=2000 \
         --feature-threshold=0.98 \
         --result-dir=/pvc/rainbow_lyf/results \
 	--checkpoint-interval=100000
