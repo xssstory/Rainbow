@@ -272,7 +272,8 @@ else:
         if done:
           dqn.update_deploy_net(None, args, mem)
       elif args.deploy_policy == "reset_feature_force":
-        dqn.learn(mem)
+        if T % args.replay_frequency == 0:
+          dqn.learn(mem)
         if args.memory is not None:
           save_memory(mem, args.memory, args.disable_bzip_memory)
         dqn.update_deploy_net(T // args.replay_frequency, args, mem, is_reset=(T > 0 and done))
