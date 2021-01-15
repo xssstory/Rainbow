@@ -47,7 +47,8 @@ parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
 parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', "reset_feature", 'q-value', 'dqn-feature-min',
-                                                              'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy'])
+                                                              'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy',
+                                                              'reset_feature_force', 'feature_lowf'])
 parser.add_argument('--record-action-diff', default=False, action="store_true")
 parser.add_argument('--record-feature-sim', default=False, action="store_true")
 parser.add_argument('--switch-memory-priority', default=True, type=eval)
@@ -270,11 +271,19 @@ else:
             save_memory(mem, args.memory, args.disable_bzip_memory)
         if done:
           dqn.update_deploy_net(None, args, mem)
+      elif args.deploy_policy == "reset_feature_force":
+        dqn.learn(mem)
+        if args.memory is not None:
+          save_memory(mem, args.memory, args.disable_bzip_memory)
+        dqn.update_deploy_net(T // args.replay_frequency, args, mem, is_reset=(T > 0 and done))
       else:
         if T % args.replay_frequency == 0:
           dqn.learn(mem)  # Train with n-step distributional double-Q learning
           if (args.deploy_policy in ["policy", "policy_diverge", "dqn-feature"]):
               if T % (args.replay_frequency * 8) == 0:
+                  dqn.update_deploy_net(T // args.replay_frequency, args, mem)
+          elif args.deploy_policy == "feature_lowf":
+              if T % (args.replay_frequency * 64) == 0:
                   dqn.update_deploy_net(T // args.replay_frequency, args, mem)
           else:
               dqn.update_deploy_net(T // args.replay_frequency, args, mem)

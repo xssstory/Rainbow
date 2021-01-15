@@ -40,7 +40,7 @@ class Agent():
       self.ratio = deque(maxlen=100)
     if self.deploy_policy == "policy" or self.deploy_policy == "reset_policy" or args.record_action_diff:
       self.action_diff = deque(maxlen=100)
-    if self.deploy_policy in ['dqn-feature', 'reset_feature', 'dqn-feature-min'] or args.record_feature_sim:
+    if self.deploy_policy in ['dqn-feature', 'reset_feature', 'dqn-feature-min', 'reset_feature_force', 'feature_lowf'] or args.record_feature_sim:
       self.feature_sim = deque(maxlen=100)
     if self.deploy_policy and self.deploy_policy.endswith('-min'):
       if isinstance(args.min_interval, int):
@@ -194,7 +194,7 @@ class Agent():
       # sample_time = time.time() - start_time
       # print("sample time", sample_time)
 
-      if self.deploy_policy in ['dqn-feature', 'reset_feature', 'dqn-feature-min']:
+      if self.deploy_policy in ['dqn-feature', 'reset_feature', 'dqn-feature-min', 'feature_lowf']:
         if self.deploy_policy == "dqn-feature-min":
           if self.cur_interval < self.min_interval:
             self.cur_interval += 1
@@ -223,6 +223,28 @@ class Agent():
             self.cur_interval = 1
             if self.adapt_min_interval and self.min_interval < 10000:
               self.min_interval += self.min_interval_update
+      elif self.deploy_policy == "reset_feature_force":
+        need_deploy = False
+        if T - self.last_update_T > 1000:
+          need_deploy = True
+        elif is_reset:
+          self.eval()
+          with torch.no_grad():
+            deploy_feature2 = self.deploy_net.extract(states).detach()
+            online_feature2 = self.online_net.extract(states).detach()
+            deploy_feature2 = F.normalize(deploy_feature2)
+            online_feature2 = F.normalize(online_feature2)
+            sim2 = deploy_feature2.mm(online_feature2.T)
+            sim = sim2.diagonal().mean()
+            if hasattr(self, "feature_sim"):
+              self.feature_sim.append(sim.item())
+          self.train()
+          if sim < args.feature_threshold:
+            need_deploy = True
+        if need_deploy:
+          self.deploy_net.load_state_dict(self.online_net.state_dict())
+          self.num_deploy += 1
+          self.last_update_T = T 
       elif self.deploy_policy == 'q-value':
         self.eval()
         with torch.no_grad():
