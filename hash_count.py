@@ -13,13 +13,13 @@ class HashTable(object):
     self.A = torch.randn([self.hash_dim, self.state_dim], device=args.device)
       
 
-  def step(self, state, action, T, learn_start):
+  def step(self, state, action, count_action_state):
     hash_item, state_action_hash_item = self.hash_state(state, action)
     if hash_item in self.table:
       self.table[hash_item] += 1
     else:
       self.table[hash_item] = 1
-    if T > learn_start:
+    if count_action_state:
       if state_action_hash_item in self.state_action_table:
         self.state_action_table[state_action_hash_item] += 1
       else:
@@ -40,5 +40,5 @@ class HashTable(object):
     state = torch.load(os.path.join(path, name), map_location='cpu')
     self.A = state['A'].to(device=self.device)
     self.table = state['table']
-    self.state_action_table = state['state_action_table']
+    self.state_action_table = state.get('state_action_table', {})
 

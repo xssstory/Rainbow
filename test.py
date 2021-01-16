@@ -84,7 +84,7 @@ def eval_visitation(args, dqn, hash_table, env_class):
     for step in range(args.max_episode_length):
       # action = dqn.act_e_greedy(state)  # Choose an action ε-greedily
       action = dqn.act(state)
-      hash_table.step(state, action)
+      hash_table.step(state, action, True)
       state, reward, done, _ = env.step(action)  # Step
       T_steps += 1
       reward_sum += reward

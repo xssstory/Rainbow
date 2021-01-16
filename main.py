@@ -221,6 +221,8 @@ else:
   dqn.train()
   T, done = 0, True
   episode_length, episode_reward = 0, 0
+  if args.deploy_policy == "visited":
+    visited_deploy_flag = False
   for T in trange(1, args.T_max + 1):
     if T > 4000000:
       print("Terminate after 4M steps!")
@@ -239,7 +241,7 @@ else:
     episode_reward += reward
     episode_length += 1
     if args.count_base_bonus > 0:
-      reward = reward + args.count_base_bonus / math.sqrt(hash_table.step(state, action, T, args.learn_start))
+      reward = reward + args.count_base_bonus / math.sqrt(hash_table.step(state, action, T > args.learn_start and not visited_deploy_flag))
 
     if args.reward_clip > 0:
       reward = max(min(reward, args.reward_clip), -args.reward_clip)  # Clip rewards      
@@ -278,11 +280,15 @@ else:
           save_memory(mem, args.memory, args.disable_bzip_memory)
         dqn.update_deploy_net(T // args.replay_frequency, args, mem, is_reset=(T > 0 and done))
       elif args.deploy_policy == "visited":
-        if T % args.replay_frequency == 0:
-          dqn.learn(mem)
         count = hash_table.state_action_count
         if count <= 0 or count & count - 1 == 0:
-          dqn.update_deploy_net(None, args, mem)
+          visited_deploy_flag = True
+        if T % args.replay_frequency == 0:
+          dqn.learn(mem)
+          if visited_deploy_flag:
+            dqn.update_deploy_net(None, args, mem)
+            visited_deploy_flag = False
+
       else:
         if T % args.replay_frequency == 0:
           dqn.learn(mem)  # Train with n-step distributional double-Q learning
