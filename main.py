@@ -221,8 +221,8 @@ else:
   dqn.train()
   T, done = 0, True
   episode_length, episode_reward = 0, 0
-  if args.deploy_policy == "visited":
-    visited_deploy_flag = False
+
+  visited_deploy_flag = False
   for T in trange(1, args.T_max + 1):
     if T > 4000000:
       print("Terminate after 4M steps!")
