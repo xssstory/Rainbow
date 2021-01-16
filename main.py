@@ -57,6 +57,7 @@ parser.add_argument('--switch-sample-strategy', default=None, choices=['uniform'
 parser.add_argument('--switch-memory-capcacity', default=1000000, type=int)
 parser.add_argument('--diverge-threshold', default=0.2, type=float)
 parser.add_argument('--delploy-interval', default=1, type=int)
+parser.add_argument('--force-interval', default=1000, type=int, help='For reset_feature_force strategy')
 parser.add_argument('--min-interval', default=0, type=min_interval_type, help='This setting is useful for dqn-feature-min')
 parser.add_argument('--exp-base', default=2, type=float, help='This setting is useful for exp')
 parser.add_argument('--feature-threshold', default=0.98, type=float, help='This setting is useful for dqn-feature and dqn-feature-fixed')
