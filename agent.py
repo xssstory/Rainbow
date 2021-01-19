@@ -182,7 +182,7 @@ class Agent():
         self.num_deploy += 1
     elif self.deploy_policy == "reset_feature_force":
         need_deploy = False
-        if T - self.last_update_T > 1000:
+        if T - self.last_update_T > args.force_interval:
           need_deploy = True
         elif is_reset:
           self.eval()
