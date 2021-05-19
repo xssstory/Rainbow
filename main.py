@@ -49,6 +49,7 @@ parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', '
 parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', "reset_feature", 'q-value', 'dqn-feature-min',
                                                               'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy', 'visited',
                                                               'reset_feature_force', 'feature_lowf'])
+parser.add_argument("--use-gradient-weight", default=False, action="store_true")
 parser.add_argument('--record-action-diff', default=False, action="store_true")
 parser.add_argument('--record-feature-sim', default=False, action="store_true")
 parser.add_argument('--switch-memory-priority', default=True, type=eval)
@@ -91,6 +92,7 @@ parser.add_argument('--batch-size', type=int, default=32, metavar='SIZE', help='
 parser.add_argument('--norm-clip', type=float, default=10, metavar='NORM', help='Max L2 norm for gradient clipping')
 parser.add_argument('--learn-start', type=int, default=int(20e3), metavar='STEPS', help='Number of steps before starting training')
 parser.add_argument('--evaluate', action='store_true', help='Evaluate only')
+parser.add_argument('--evaluate-dir', default=None, type=str)
 parser.add_argument('--evaluation-interval', type=int, default=10000, metavar='STEPS', help='Number of training steps between evaluations')
 parser.add_argument('--evaluation-episodes', type=int, default=10, metavar='N', help='Number of evaluation episodes to average over')
 parser.add_argument('--state-visitation-episodes', type=int, default=10, help='Number of evaluation episodes to measure state visitation')
@@ -201,6 +203,36 @@ while T < args.evaluation_size:
   val_mem.append(state, None, None, done)
   state = next_state
   T += 1
+
+# if args.evaluate_dir:
+#   eval_metrics = {}
+#   eval_metrics['steps'] = []
+#   eval_metrics['reward'] = []
+#   eval_hash_table = HashTable(args)
+#   args.state_visitation_episodes = args.evaluation_episodes
+#   import glob
+#   files = glob.glob(args.evaluate_dir + "/*")
+#   checkpoint_dic = {}
+#   for f in files:
+#     if "checkpoint" in f:
+#       num = int(f[f.find('checkpoint_') + 11:].strip('.pth'))
+#       checkpoint_dic[num] = f
+#   state_visitation, total_steps, avg_reward, std_reward = eval_visitation(args, dqn, eval_hash_table, ENV_DIC[args.env_type])
+#   print(avg_reward)
+#   eval_metrics['steps'].append(0)
+#   eval_metrics['reward'].append(avg_reward)
+#   for k, v in sorted(checkpoint_dic.items(), key=lambda x: x[0]):
+#     if k > 1.5e6:
+#       break
+#     dqn.load(v)
+#     dqn.eval()
+#     state_visitation, total_steps, avg_reward, std_reward = eval_visitation(args, dqn, eval_hash_table, ENV_DIC[args.env_type])
+#     print(avg_reward)
+#     eval_metrics['steps'].append(k)
+#     eval_metrics['reward'].append(avg_reward)
+#     torch.save(eval_metrics, os.path.join(results_dir, "eval_metrics.pth"))
+#   import sys
+#   sys.exit()
 
 if args.evaluate:
   dqn.eval()  # Set DQN (online network) to evaluation mode

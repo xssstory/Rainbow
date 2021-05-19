@@ -198,12 +198,16 @@ class Agent():
                 raise RuntimeError("switch_sample_strategy {} is not supported !".format(args.switch_sample_strategy))
             deploy_feature2 = self.deploy_net.extract(states).detach()
             online_feature2 = self.online_net.extract(states).detach()
-            deploy_feature2 = F.normalize(deploy_feature2)
-            online_feature2 = F.normalize(online_feature2)
-            sim2 = deploy_feature2.mm(online_feature2.T)
-            sim = sim2.diagonal().mean()
-            if hasattr(self, "feature_sim"):
-              self.feature_sim.append(sim.item())
+          if args.use_gradient_weight:
+            gradient_weight = self.gradient_weight(states, actions, next_states, returns, nonterminals, weights)
+            deploy_feature2 = deploy_feature2 * gradient_weight
+            online_feature2 = online_feature2 * gradient_weight
+          deploy_feature2 = F.normalize(deploy_feature2)
+          online_feature2 = F.normalize(online_feature2)
+          sim2 = deploy_feature2.mm(online_feature2.T)
+          sim = sim2.diagonal().mean()
+          if hasattr(self, "feature_sim"):
+            self.feature_sim.append(sim.item())
           self.train()
           if sim < args.feature_threshold:
             need_deploy = True
@@ -241,12 +245,16 @@ class Agent():
           #online_feature = self.online_net.extract(states).detach().cpu().numpy()
           deploy_feature2 = self.deploy_net.extract(states).detach()
           online_feature2 = self.online_net.extract(states).detach()
-          deploy_feature2 = F.normalize(deploy_feature2)
-          online_feature2 = F.normalize(online_feature2)
-          sim2 = deploy_feature2.mm(online_feature2.T)
-          sim = sim2.diagonal().mean()
-          if hasattr(self, "feature_sim"):
-            self.feature_sim.append(sim.item())
+        if args.use_gradient_weight:
+          gradient_weight = self.gradient_weight(states, actions, next_states, returns, nonterminals, weights)
+          deploy_feature2 = deploy_feature2 * gradient_weight
+          online_feature2 = online_feature2 * gradient_weight
+        deploy_feature2 = F.normalize(deploy_feature2)
+        online_feature2 = F.normalize(online_feature2)
+        sim2 = deploy_feature2.mm(online_feature2.T)
+        sim = sim2.diagonal().mean()
+        if hasattr(self, "feature_sim"):
+          self.feature_sim.append(sim.item())
         #sim = np.dot(deploy_feature, online_feature.T) \
         #/(np.linalg.norm(deploy_feature, axis=1, keepdims=True)* np.linalg.norm(online_feature, axis=1, keepdims=True))
         #sim = sim.diagonal().mean()
@@ -320,3 +328,48 @@ class Agent():
   def eval(self):
     self.online_net.eval()
     self.deploy_net.eval()
+
+  def gradient_weight(self, states, actions, next_states, returns, nonterminals, weights):
+    
+    # log_ps = self.online_net(states, log=True)  # Log probabilities log p(s_t, ·; θonline)
+    batch_size = actions.size(0)
+    self.train()
+    feature = self.online_net.extract(states)
+    # ps = self.online_net.feature2Q(feature, log=False)
+    # ds = self.support.expand_as(ps) * ps
+
+    log_ps = self.online_net.feature2Q(feature, log=True)
+    log_ps_a = log_ps[range(batch_size), actions]  # log p(s_t, a_t; θonline)
+
+    with torch.no_grad():
+      # Calculate nth next state probabilities
+      pns = self.online_net(next_states)  # Probabilities p(s_t+n, ·; θonline)
+      dns = self.support.expand_as(pns) * pns  # Distribution d_t+n = (z, p(s_t+n, ·; θonline))
+      argmax_indices_ns = dns.sum(2).argmax(1)  # Perform argmax action selection using online network: argmax_a[(z, p(s_t+n, a; θonline))]
+      self.target_net.reset_noise()  # Sample new target net noise
+      pns = self.target_net(next_states)  # Probabilities p(s_t+n, ·; θtarget)
+      pns_a = pns[range(batch_size), argmax_indices_ns]  # Double-Q probabilities p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)
+
+      # Compute Tz (Bellman operator T applied to z)
+      Tz = returns.unsqueeze(1) + nonterminals * (self.discount ** self.n) * self.support.unsqueeze(0)  # Tz = R^n + (γ^n)z (accounting for terminal states)
+      Tz = Tz.clamp(min=self.Vmin, max=self.Vmax)  # Clamp between supported values
+      # Compute L2 projection of Tz onto fixed support z
+      b = (Tz - self.Vmin) / self.delta_z  # b = (Tz - Vmin) / Δz
+      l, u = b.floor().to(torch.int64), b.ceil().to(torch.int64)
+      # Fix disappearing probability mass when l = b = u (b is int)
+      l[(u > 0) * (l == u)] -= 1
+      u[(l < (self.atoms - 1)) * (l == u)] += 1
+
+      # Distribute probability of Tz
+      m = states.new_zeros(batch_size, self.atoms)
+      offset = torch.linspace(0, ((batch_size - 1) * self.atoms), batch_size).unsqueeze(1).expand(batch_size, self.atoms).to(actions)
+      m.view(-1).index_add_(0, (l + offset).view(-1), (pns_a * (u.float() - b)).view(-1))  # m_l = m_l + p(s_t+n, a*)(u - b)
+      m.view(-1).index_add_(0, (u + offset).view(-1), (pns_a * (b - l.float())).view(-1))  # m_u = m_u + p(s_t+n, a*)(b - l)
+
+    loss = -torch.sum(m * log_ps_a, 1)
+    loss = (weights * loss).mean() if weights is not None else loss.sum()
+    # print(loss.item())
+    # loss = ds.sum(2).max(1)[0].mean()
+    grads = torch.autograd.grad([loss], [feature])[0].abs()
+    # return torch.softmax(grads, dim=-1)
+    return grads

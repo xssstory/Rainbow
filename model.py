@@ -46,6 +46,17 @@ class DQN(nn.Module):
     x = self.convs(x)
     x = x.view(-1, self.conv_output_size)
     return x
+  
+  def feature2Q(self, x, log=False):
+    v = self.fc_z_v(F.relu(self.fc_h_v(x)))  # Value stream
+    a = self.fc_z_a(F.relu(self.fc_h_a(x)))  # Advantage stream
+    v, a = v.view(-1, 1, self.atoms), a.view(-1, self.action_space, self.atoms)
+    q = v + a - a.mean(1, keepdim=True)  # Combine streams
+    if log:  # Use log softmax for numerical stability
+      q = F.log_softmax(q, dim=2)  # Log probabilities with action over second dimension
+    else:
+      q = F.softmax(q, dim=2)  # Probabilities with action over second dimension
+    return q
 
 class SepsisDqn(nn.Module):
   def __init__(self, args, action_space):
