@@ -20,6 +20,7 @@ DQN_DIC = {
 
 class Agent():
   def __init__(self, args, env):
+    self.adaptive_softmax = args.adaptive_softmax
     self.dqn_model = DQN_DIC[args.env_type]
     self.action_space = env.action_space()
     self.atoms = args.atoms
@@ -162,10 +163,11 @@ class Agent():
         if hasattr(self, "feature_sim"):
           deploy_feature2 = self.deploy_net.extract(states).detach()
           online_feature2 = self.online_net.extract(states).detach()
-          deploy_feature2 = F.normalize(deploy_feature2)
-          online_feature2 = F.normalize(online_feature2)
-          sim2 = deploy_feature2.mm(online_feature2.T)
-          sim = sim2.diagonal().mean()
+          sim = torch.cosine_similarity(deploy_feature2, online_feature2).mean()
+          # deploy_feature2 = F.normalize(deploy_feature2)
+          # online_feature2 = F.normalize(online_feature2)
+          # sim2 = deploy_feature2.mm(online_feature2.T)
+          # sim = sim2.diagonal().mean()
           self.feature_sim.append(sim.item())
         self.train()
       self.deploy_net.load_state_dict(self.online_net.state_dict())
@@ -202,10 +204,11 @@ class Agent():
             gradient_weight = self.gradient_weight(states, actions, next_states, returns, nonterminals, weights)
             deploy_feature2 = deploy_feature2 * gradient_weight
             online_feature2 = online_feature2 * gradient_weight
-          deploy_feature2 = F.normalize(deploy_feature2)
-          online_feature2 = F.normalize(online_feature2)
-          sim2 = deploy_feature2.mm(online_feature2.T)
-          sim = sim2.diagonal().mean()
+          sim = torch.cosine_similarity(deploy_feature2, online_feature2).mean()
+          # deploy_feature2 = F.normalize(deploy_feature2)
+          # online_feature2 = F.normalize(online_feature2)
+          # sim2 = deploy_feature2.mm(online_feature2.T)
+          # sim = sim2.diagonal().mean()
           if hasattr(self, "feature_sim"):
             self.feature_sim.append(sim.item())
           self.train()
@@ -249,10 +252,11 @@ class Agent():
           gradient_weight = self.gradient_weight(states, actions, next_states, returns, nonterminals, weights)
           deploy_feature2 = deploy_feature2 * gradient_weight
           online_feature2 = online_feature2 * gradient_weight
-        deploy_feature2 = F.normalize(deploy_feature2)
-        online_feature2 = F.normalize(online_feature2)
-        sim2 = deploy_feature2.mm(online_feature2.T)
-        sim = sim2.diagonal().mean()
+        sim = torch.cosine_similarity(deploy_feature2, online_feature2).mean()
+        # deploy_feature2 = F.normalize(deploy_feature2)
+        # online_feature2 = F.normalize(online_feature2)
+        # sim2 = deploy_feature2.mm(online_feature2.T)
+        # sim = sim2.diagonal().mean()
         if hasattr(self, "feature_sim"):
           self.feature_sim.append(sim.item())
         #sim = np.dot(deploy_feature, online_feature.T) \
@@ -372,4 +376,6 @@ class Agent():
     # loss = ds.sum(2).max(1)[0].mean()
     grads = torch.autograd.grad([loss], [feature])[0].abs()
     # return torch.softmax(grads, dim=-1)
+    if self.adaptive_softmax:
+      return torch.softmax(grads * 1 / grads.mean(), dim=-1)
     return grads

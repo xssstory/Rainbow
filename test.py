@@ -30,10 +30,11 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
   done = True
   for _ in tqdm(range(args.evaluation_episodes)):
     state, reward_sum, done = env.reset(), 0, False
-    for step in range(int(108e3)): 
-      
-      # action = dqn.act_e_greedy(state)  # Choose an action ε-greedily
-      action = dqn.act(state)
+    for step in range(int(108e3)):     
+      if args.explore_eps is None:
+        action = dqn.act(state)  # Choose an action greedily (with noisy weights)
+      else:
+        action = dqn.act_e_greedy(state)
       state, reward, done, _ = env.step(action)  # Step
       reward_sum += reward
       if args.render:
@@ -82,8 +83,10 @@ def eval_visitation(args, dqn, hash_table, env_class):
   for _ in tqdm(range(args.state_visitation_episodes)):
     state, reward_sum, done = env.reset(), 0, False
     for step in range(args.max_episode_length):
-      # action = dqn.act_e_greedy(state)  # Choose an action ε-greedily
-      action = dqn.act(state)
+      if args.explore_eps is None:
+        action = dqn.act(state)  # Choose an action greedily (with noisy weights)
+      else:
+        action = dqn.act_e_greedy(state)
       hash_table.step(state, action, True)
       state, reward, done, _ = env.step(action)  # Step
       T_steps += 1

@@ -50,6 +50,7 @@ parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'd
                                                               'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy', 'visited',
                                                               'reset_feature_force', 'feature_lowf'])
 parser.add_argument("--use-gradient-weight", default=False, action="store_true")
+parser.add_argument("--adaptive-softmax", default=False, action="store_true")
 parser.add_argument('--record-action-diff', default=False, action="store_true")
 parser.add_argument('--record-feature-sim', default=False, action="store_true")
 parser.add_argument('--switch-memory-priority', default=True, type=eval)
@@ -65,6 +66,7 @@ parser.add_argument('--feature-threshold', default=0.98, type=float, help='This 
 parser.add_argument('--td-error-threshold', default=0.1, type=float, help='This settiong is useful for td-error')
 parser.add_argument('--q-value-threshold', default=0.05, type=float, help='This setting is useful for q-value')
 parser.add_argument('--policy-diff-threshold', default=0.05, type=float, help='This setting is useful for policy')
+parser.add_argument("--explore-eps", default=None, type=float)
 parser.add_argument('--count-base-bonus', default=-1, type=float)
 parser.add_argument('--hash-dim', default=32, type=float)
 parser.add_argument('--game', type=str, default='space_invaders', choices=atari_py.list_games(), help='ATARI game')
@@ -269,7 +271,11 @@ else:
     if T % args.replay_frequency == 0:
       dqn.reset_noise()  # Draw a new set of noisy weights
 
-    action = dqn.act(state)  # Choose an action greedily (with noisy weights)
+    if args.explore_eps is None:
+      action = dqn.act(state)  # Choose an action greedily (with noisy weights)
+    else:
+      eps = max(1 - (1 - args.explore_eps) / 250e3 * T, args.explore_eps)
+      action = dqn.act_e_greedy(state, eps)
     next_state, reward, done, _ = env.step(action)  # Step
     episode_reward += reward
     episode_length += 1
