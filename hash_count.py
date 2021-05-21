@@ -54,7 +54,7 @@ class HashTable(object):
     evals = evals[:, 0]
     cur_info_value = evals.abs().min().item()
     previous_value = self.previous_info_value.get(self.cur_info_index, None)
-    out_flag = previous_value is None or cur_info_value / previous_value >= 2
+    out_flag = previous_value is None or previous_value == 0 or cur_info_value / previous_value >= 2
     if out_flag:
       self.previous_info_value[self.cur_info_index] = cur_info_value
     return cur_info_value, out_flag
