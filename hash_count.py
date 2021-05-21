@@ -53,10 +53,11 @@ class HashTable(object):
     (evals, _) = torch.eig(self.info_matrix[self.cur_info_index], eigenvectors=False)
     evals = evals[:, 0]
     cur_info_value = evals.abs().min().item()
-    previous_value = self.previous_info_value.get(self.cur_info_index, 1e-6)
-    if cur_info_value / previous_value >= 2:
+    previous_value = self.previous_info_value.get(self.cur_info_index, None)
+    out_flag = previous_value is None or cur_info_value / previous_value >= 2
+    if out_flag:
       self.previous_info_value[self.cur_info_index] = cur_info_value
-    return cur_info_value, cur_info_value / previous_value >= 2
+    return cur_info_value, out_flag
 
   def save(self, path, name='hash.pth'):
     torch.save({'A': self.A, 'table': self.table, 'state_action_table': self.state_action_table}, os.path.join(path, name))
