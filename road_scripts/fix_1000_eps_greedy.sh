@@ -7,4 +7,5 @@ CUDA_VISIBLE_DEVICES=$1 python main.py \
         --seed=$2 \
 	--deploy-policy=fixed \
 	--delploy-interval=1000 \
+	--result-dir=/pvc/rainbow_lyf/results \
 	--checkpoint-interval=100000

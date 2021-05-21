@@ -218,7 +218,7 @@ class Agent():
           self.deploy_net.load_state_dict(self.online_net.state_dict())
           self.num_deploy += 1
           self.last_update_T = T
-    elif self.deploy_policy == "visited":
+    elif self.deploy_policy in ["visited", "info-matrix"]:
       self.deploy_net.load_state_dict(self.online_net.state_dict())
       self.num_deploy += 1
     else:

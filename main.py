@@ -47,8 +47,9 @@ parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
 parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', "reset_feature", 'q-value', 'dqn-feature-min',
-                                                              'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy', 'visited',
+                                                              'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy', 'visited', "info-matrix",
                                                               'reset_feature_force', 'feature_lowf'])
+parser.add_argument("--info-matrix-interval", default=10, type=int)
 parser.add_argument("--use-gradient-weight", default=False, action="store_true")
 parser.add_argument("--adaptive-softmax", default=False, action="store_true")
 parser.add_argument('--record-action-diff', default=False, action="store_true")
@@ -267,6 +268,7 @@ else:
       metrics['episode_length'].append(episode_length)
       metrics['episode_reward'].append(episode_reward)
       episode_length, episode_reward = 0, 0
+      last_done_T = T
 
     if T % args.replay_frequency == 0:
       dqn.reset_noise()  # Draw a new set of noisy weights
@@ -280,7 +282,11 @@ else:
     episode_reward += reward
     episode_length += 1
     if args.count_base_bonus > 0:
-      reward = reward + args.count_base_bonus / math.sqrt(hash_table.step(state, action, T > args.learn_start and not visited_deploy_flag))
+      if args.deploy_policy == "info-matrix":
+        info_index = (T - last_done_T) // args.info_matrix_interval
+        reward = reward + args.count_base_bonus / math.sqrt(hash_table.step(state, action, T > args.learn_start and not visited_deploy_flag, True, info_index))
+      else:
+        reward = reward + args.count_base_bonus / math.sqrt(hash_table.step(state, action, T > args.learn_start and not visited_deploy_flag))
 
     if args.reward_clip > 0:
       reward = max(min(reward, args.reward_clip), -args.reward_clip)  # Clip rewards      
@@ -322,6 +328,14 @@ else:
         count = hash_table.state_action_count
         if count <= 0 or count & count - 1 == 0:
           visited_deploy_flag = True
+        if T % args.replay_frequency == 0:
+          dqn.learn(mem)
+          if visited_deploy_flag:
+            dqn.update_deploy_net(None, args, mem)
+            visited_deploy_flag = False
+      elif args.deploy_policy == "info-matrix":
+        if (T - last_done_T) % args.info_matrix_interval == args.info_matrix_interval - 1 or done:
+          info_value, visited_deploy_flag = hash_table.info_matrix_value
         if T % args.replay_frequency == 0:
           dqn.learn(mem)
           if visited_deploy_flag:
