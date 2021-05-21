@@ -1,7 +1,7 @@
 CUDA_VISIBLE_DEVICES=$1 python main.py \
 	--id=$0.$2 \
 	--env-type=atari \
-	--game=beam_rider \
+	--game=pong \
 	--count-base-bonus=0.01 \
         --seed=$2 \
 	--deploy-policy=info-matrix \
