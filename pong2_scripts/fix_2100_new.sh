@@ -1,11 +1,10 @@
 CUDA_VISIBLE_DEVICES=$1 python main.py \
 	--id=$0.$2 \
 	--env-type=atari \
-	--game=qbert \
+	--game=pong \
 	--count-base-bonus=0.01 \
         --seed=$2 \
-	--deploy-policy=info-matrix \
-	--info-matrix-interval=10 \
-	--info-matrix-ratio=2 \
-        --result-dir=/pvc/rainbow_lyf/results \
+	--deploy-policy=fixed \
+	--delploy-interval=2100 \
+	--result-dir=/pvc/rainbow_lyf/results \
 	--checkpoint-interval=100000
