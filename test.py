@@ -39,7 +39,7 @@ def test(args, T, dqn, val_mem, metrics, results_dir, env_class, evaluate=False)
       reward_sum += reward
       if args.render:
         env.render()
-      if env.life_termination and args.game == "breakout":
+      if getattr(env, 'life_termination', None) and args.game == "breakout":
         env.ale.act(1)
         env.life_termination = False
       if done:
@@ -93,7 +93,7 @@ def eval_visitation(args, dqn, hash_table, env_class):
       reward_sum += reward
       if args.render:
         env.render()
-      if env.life_termination and args.game == "breakout":
+      if getattr(env, 'life_termination', None) and args.game == "breakout":
         env.ale.act(1)
         env.life_termination = False
       if done:

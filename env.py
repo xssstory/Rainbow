@@ -106,7 +106,7 @@ class Env():
   def close(self):
     cv2.destroyAllWindows()
 
-import whynot.gym as gym
+# import whynot.gym as gym
 from whynot.gym.envs import registry
 class WhyNotEnv():
 
@@ -132,6 +132,45 @@ class WhyNotEnv():
   def step(self, action):
     s, reward, done, info = self.env.step(action)
     reward /= 1e5
+    self.state_buffer.append(torch.tensor(s.reshape([-1, 1]), device=self.device, dtype=torch.float32))
+    return torch.stack(list(self.state_buffer), 0), reward, done, info
+  
+  def action_space(self):
+    return self.env.action_space.n
+  
+  def render(self):
+    return self.env.render()
+  
+  def close(self):
+    self.env.close()
+    del self.env
+  
+
+import gym
+
+class GymEnv():
+
+  def __init__(self, args, training=True):
+    self.env = gym.make(args.game)
+    seed = args.seed if training else args.seed + 1 # different seeds for training and evaluation
+    self.env.seed(seed)
+    self.window = args.history_length  # Number of frames to concatenate
+    self.state_buffer = deque([], maxlen=args.history_length)
+    self.device = args.device
+    self.state_dim = self.env.observation_space.shape[0]
+
+  def _reset_buffer(self):
+    for _ in range(self.window):
+      self.state_buffer.append(torch.zeros(self.state_dim, 1, device=self.device))
+
+  def reset(self):
+    s = self.env.reset()
+    self._reset_buffer()
+    self.state_buffer.append(torch.tensor(s.reshape([-1, 1]), device=self.device, dtype=torch.float32))
+    return torch.stack(list(self.state_buffer), 0)
+
+  def step(self, action):
+    s, reward, done, info = self.env.step(action)
     self.state_buffer.append(torch.tensor(s.reshape([-1, 1]), device=self.device, dtype=torch.float32))
     return torch.stack(list(self.state_buffer), 0), reward, done, info
   

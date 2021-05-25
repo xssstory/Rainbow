@@ -101,3 +101,50 @@ class SepsisDqn(nn.Module):
     x = self.fc_forward_2(x)
     x = F.relu(x)
     return x
+
+class GymDqn(nn.Module):
+  def __init__(self, args, action_space):
+    super(GymDqn, self).__init__()
+    self.atoms = args.atoms
+    self.action_space = action_space
+    self.input_size = args.history_length * args.state_dim
+
+    self.fc_forward = nn.Linear(self.input_size, args.hidden_size)
+    # self.fc_forward_2 = nn.Linear(args.hidden_size, args.hidden_size)
+
+    self.fc_h_v = nn.Linear(args.hidden_size, args.hidden_size)
+    self.fc_h_a = nn.Linear(args.hidden_size, args.hidden_size)
+    self.fc_z_v = nn.Linear(args.hidden_size, action_space)
+    self.fc_z_a = nn.Linear(args.hidden_size, action_space)
+    # self.fc_z_v = nn.Linear(args.hidden_size, self.atoms)
+    # self.fc_z_a = nn.Linear(args.hidden_size, action_space * self.atoms)
+
+  def forward(self, x, log=False):
+ 
+    # x = x.view(-1, self.input_size)
+    # x = self.fc_forward(x)
+    # x = F.relu(x)
+    # x = self.fc_forward_2(x)
+    # x = F.relu(x)
+    x = self.extract(x)
+
+    v = self.fc_z_v(F.relu(self.fc_h_v(x)))  # Value stream
+    a = self.fc_z_a(F.relu(self.fc_h_a(x)))  # Advantage stream
+    # v, a = v.view(-1, 1, self.atoms), a.view(-1, self.action_space, self.atoms)
+    q = v + a - a.mean(1, keepdim=True)  # Combine streams
+    # if log:  # Use log softmax for numerical stability
+      # q = F.log_softmax(q, dim=2)  # Log probabilities with action over second dimension
+    # else:
+      # q = F.softmax(q, dim=2)  # Probabilities with action over second dimension
+    return q
+
+  def reset_noise(self):
+    pass
+  
+  def extract(self, x):
+    x = x.view(-1, self.input_size)
+    x = self.fc_forward(x)
+    x = F.relu(x)
+    # x = self.fc_forward_2(x)
+    # x = F.relu(x)
+    return x

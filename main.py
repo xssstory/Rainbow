@@ -12,7 +12,7 @@ import torch
 from tqdm import trange
 
 from agent import Agent
-from env import Env, WhyNotEnv
+from env import Env, WhyNotEnv, GymEnv
 from memory import ReplayMemory
 from test import test, eval_visitation
 
@@ -27,6 +27,7 @@ ENV_DIC = {
   'atari': Env,
   'sepsis': SepsisEnv,
   'hiv': WhyNotEnv,
+  "gym": GymEnv,
 }
 
 def min_interval_type(s):
@@ -45,11 +46,12 @@ parser = argparse.ArgumentParser(description='Rainbow')
 parser.add_argument('--id', type=str, default='default', help='Experiment ID')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv'])
+parser.add_argument('--env-type', default='atari', choices=['atari', 'sepsis', 'hiv', 'gym'])
 parser.add_argument('--deploy-policy', default=None, choices=['fixed', 'exp', 'dqn-feature', "reset_feature", 'q-value', 'dqn-feature-min',
                                                               'reset', 'policy', 'policy_adapt', 'policy_diverge', 'reset_policy', 'visited', "info-matrix",
                                                               'reset_feature_force', 'feature_lowf'])
 parser.add_argument("--info-matrix-interval", default=10, type=int)
+parser.add_argument("--info-matrix-ratio", default=2, type=float)
 parser.add_argument("--use-gradient-weight", default=False, action="store_true")
 parser.add_argument("--adaptive-softmax", default=False, action="store_true")
 parser.add_argument('--record-action-diff', default=False, action="store_true")
@@ -67,10 +69,10 @@ parser.add_argument('--feature-threshold', default=0.98, type=float, help='This 
 parser.add_argument('--td-error-threshold', default=0.1, type=float, help='This settiong is useful for td-error')
 parser.add_argument('--q-value-threshold', default=0.05, type=float, help='This setting is useful for q-value')
 parser.add_argument('--policy-diff-threshold', default=0.05, type=float, help='This setting is useful for policy')
-parser.add_argument("--explore-eps", default=None, type=float)
+parser.add_argument("--explore-eps", default=None, type=eval)
 parser.add_argument('--count-base-bonus', default=-1, type=float)
-parser.add_argument('--hash-dim', default=32, type=float)
-parser.add_argument('--game', type=str, default='space_invaders', choices=atari_py.list_games(), help='ATARI game')
+parser.add_argument('--hash-dim', default=32, type=int)
+parser.add_argument('--game', type=str, default='space_invaders', choices=atari_py.list_games() + ["MountainCar-v0", "Acrobot-v1"], help='ATARI game')
 parser.add_argument('--T-max', type=int, default=int(50e6), metavar='STEPS', help='Number of training steps (4x number of frames)')
 parser.add_argument('--max-episode-length', type=int, default=int(108e3), metavar='LENGTH', help='Max episode length in game frames (0 to disable)')
 parser.add_argument('--history-length', type=int, default=4, metavar='T', help='Number of consecutive states processed')
@@ -82,6 +84,7 @@ parser.add_argument('--V-min', type=float, default=-10, metavar='V', help='Minim
 parser.add_argument('--V-max', type=float, default=10, metavar='V', help='Maximum of value distribution support')
 parser.add_argument('--model', type=str, metavar='PARAMS', help='Pretrained model (state dict)')
 parser.add_argument('--memory-capacity', type=int, default=int(1e6), metavar='CAPACITY', help='Experience replay memory capacity')
+parser.add_argument("--gradient-steps", default=1, type=int)
 parser.add_argument('--replay-frequency', type=int, default=4, metavar='k', help='Frequency of sampling from memory')
 parser.add_argument('--priority-exponent', type=float, default=0.5, metavar='ω', help='Prioritised experience replay exponent (originally denoted α)')
 parser.add_argument('--priority-weight', type=float, default=0.4, metavar='β', help='Initial prioritised experience replay importance sampling weight')
@@ -141,7 +144,7 @@ if torch.cuda.is_available() and not args.disable_cuda:
 else:
   args.device = torch.device('cpu')
 
-
+print(args.device)
 # Simple ISO 8601 timestamped logger
 def log(s):
   print('[' + str(datetime.now().strftime('%Y-%m-%dT%H:%M:%S')) + '] ' + s)
@@ -171,9 +174,12 @@ if args.deploy_policy == "reset_policy" or args.deploy_policy == "reset_feature"
 # Environment
 env = ENV_DIC[args.env_type](args)
 action_space = env.action_space()
+args.state_dim = getattr(env, "state_dim", None)
+if isinstance(env, GymEnv):
+  args.observation_space = env.env.observation_space
 
-if args.count_base_bonus > 0:
-  hash_table = HashTable(args)
+# if args.count_base_bonus > 0:
+hash_table = HashTable(args)
 
 # Agent
 dqn = Agent(args, env)
@@ -276,7 +282,10 @@ else:
     if args.explore_eps is None:
       action = dqn.act(state)  # Choose an action greedily (with noisy weights)
     else:
-      eps = max(1 - (1 - args.explore_eps) / 250e3 * T, args.explore_eps)
+      init_eps = 1
+      decay_step = args.explore_eps[0] if args.explore_eps[0] > 1 else args.explore_eps[0] * args.T_max
+      final_eps = args.explore_eps[1]
+      eps = max(init_eps - (init_eps - final_eps) / decay_step * T, final_eps)
       action = dqn.act_e_greedy(state, eps)
     next_state, reward, done, _ = env.step(action)  # Step
     episode_reward += reward
@@ -323,7 +332,7 @@ else:
           dqn.learn(mem)
         if args.memory is not None:
           save_memory(mem, args.memory, args.disable_bzip_memory)
-        dqn.update_deploy_net(T // args.replay_frequency, args, mem, is_reset=(T > 0 and done))
+        dqn.update_deploy_net(T, args, mem, is_reset=(T > 0 and done))
       elif args.deploy_policy == "visited":
         count = hash_table.state_action_count
         if count <= 0 or count & count - 1 == 0:
@@ -343,16 +352,18 @@ else:
             visited_deploy_flag = False
 
       else:
+        if args.deploy_policy == "fixed":
+            dqn.update_deploy_net(T, args, mem)
         if T % args.replay_frequency == 0:
           dqn.learn(mem)  # Train with n-step distributional double-Q learning
           if (args.deploy_policy in ["policy", "policy_diverge", "dqn-feature"]):
               if T % (args.replay_frequency * 8) == 0:
-                  dqn.update_deploy_net(T // args.replay_frequency, args, mem)
+                  dqn.update_deploy_net(T, args, mem)
           elif args.deploy_policy == "feature_lowf":
               if T % (args.replay_frequency * 64) == 0:
-                  dqn.update_deploy_net(T // args.replay_frequency, args, mem)
-          else:
-              dqn.update_deploy_net(T // args.replay_frequency, args, mem)
+                  dqn.update_deploy_net(T, args, mem)
+          elif args.deploy_policy != "fixed":
+              dqn.update_deploy_net(T, args, mem)
           
           # If memory path provided, save it
           if args.memory is not None:
@@ -365,7 +376,10 @@ else:
       # Checkpoint the network
       if (args.checkpoint_interval != 0) and (T % args.checkpoint_interval == 0):
         dqn.save(results_dir, 'checkpoint_{}.pth'.format(T))
-        hash_table.save(results_dir, 'hash.pth')
+        try:
+          hash_table.save(results_dir, 'hash.pth')
+        except:
+          pass
 
     state = next_state
 

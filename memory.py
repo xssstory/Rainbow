@@ -107,6 +107,9 @@ class ReplayMemory():
     elif args.env_type == 'hiv':
       self.blank_trans = Transition(0, torch.zeros(6, 1, dtype=torch.float32), None, 0, False)
       self.state_int = False
+    else:
+      self.blank_trans = Transition(0, torch.zeros(args.state_dim, 1, dtype=torch.float32), None, 0, False)
+      self.state_int = False
     self.device = args.device
     self.capacity = capacity
     self.history = args.history_length
@@ -325,7 +328,7 @@ class ReplayMemory():
     return tree_idxs, states, actions, returns, next_states, nonterminals, None
   
   def uniform_sample(self, batch_size):
-    idxs = np.random.choice(self.transitions.size, batch_size)
+    idxs = np.random.choice(self.transitions.size, batch_size) if self.transitions.full else np.random.choice(self.transitions.index - 1, batch_size) 
     return self._sample_from_idxs(idxs)
 
   def sample_recent(self, batch_size):

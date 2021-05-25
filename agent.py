@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from __future__ import division
+from __future__ import division, with_statement
+from env import GymEnv
 import os
 import numpy as np
 import torch
@@ -11,15 +12,17 @@ import math
 from collections import deque
 import time
 
-from model import DQN, SepsisDqn
+from model import DQN, SepsisDqn, GymDqn
 DQN_DIC = {
   'atari': DQN,
   'sepsis': SepsisDqn,
   'hiv': SepsisDqn,
+  "gym": GymDqn
 }
 
 class Agent():
   def __init__(self, args, env):
+    self.gradient_steps = args.gradient_steps
     self.adaptive_softmax = args.adaptive_softmax
     self.dqn_model = DQN_DIC[args.env_type]
     self.action_space = env.action_space()
@@ -94,13 +97,19 @@ class Agent():
   # Acts based on single state (no batch)
   def act(self, state):
     with torch.no_grad():
-      return (self.deploy_net(state.unsqueeze(0)) * self.support).sum(2).argmax(1).item()
+      if issubclass(self.dqn_model, GymDqn):
+        return self.deploy_net(state).argmax(1).item()
+      else:
+        return (self.deploy_net(state.unsqueeze(0)) * self.support).sum(2).argmax(1).item()
 
   # Acts with an ε-greedy policy (used for evaluation only)
   def act_e_greedy(self, state, epsilon=0.001):  # High ε can reduce evaluation scores drastically
     return np.random.randint(0, self.action_space) if np.random.random() < epsilon else self.act(state)
 
   def learn(self, mem):
+    if issubclass(self.dqn_model, GymDqn):
+      self.learn_dqn(mem)
+      return
     # Sample transitions
     idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample(self.batch_size)
 
@@ -140,6 +149,30 @@ class Agent():
     self.optimiser.step()
 
     mem.update_priorities(idxs, loss.detach().cpu().numpy())  # Update priorities of sampled transitions
+  
+  def learn_dqn(self, mem):
+    losses = []
+    for _ in range(self.gradient_steps):
+      idxs, states, actions, returns, next_states, nonterminals, weights = mem.uniform_sample(self.batch_size)
+      cur_q_values = self.online_net(states)
+      cur_q_values = torch.gather(cur_q_values, dim=1, index=actions.unsqueeze(1).long())
+
+      with torch.no_grad():
+        next_q_values = self.target_net(next_states)
+        optim_action = self.online_net(next_states).argmax(dim=1).reshape(-1, 1)
+        # next_q_values = next_q_values.max(dim=1)[0].reshape(-1, 1)
+        next_q_values = torch.gather(next_q_values, dim=1, index=optim_action)
+        target_q_values = returns.unsqueeze(1) + nonterminals * self.discount * next_q_values
+      
+      loss = F.smooth_l1_loss(cur_q_values, target_q_values)
+      losses.append(loss.item())
+
+      self.optimiser.zero_grad()
+      loss.backward()
+      clip_grad_norm_(self.online_net.parameters(), self.norm_clip)
+      self.optimiser.step()
+
+      # mem.update_priorities(idxs, loss.detach().cpu().numpy())
 
   def update_target_net(self):
     self.target_net.load_state_dict(self.online_net.state_dict())
@@ -323,7 +356,10 @@ class Agent():
   # Evaluates Q-value based on single state (no batch)
   def evaluate_q(self, state):
     with torch.no_grad():
-      return (self.deploy_net(state.unsqueeze(0)) * self.support).sum(2).max(1)[0].item()
+      if issubclass(self.dqn_model, GymDqn):
+        return self.deploy_net(state).max(1)[0].item()
+      else:
+        return (self.deploy_net(state.unsqueeze(0)) * self.support).sum(2).max(1)[0].item()
 
   def train(self):
     self.online_net.train()
