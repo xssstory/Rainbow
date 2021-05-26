@@ -182,29 +182,30 @@ class Agent():
       # self.deploy_net.load_state_dict(self.online_net.state_dict())
       assert self.deploy_net is self.online_net
       self.num_deploy += 1
-    elif self.deploy_policy == 'fixed' and T % args.delploy_interval == 0:
-      assert self.deploy_net is not self.online_net
-      with torch.no_grad():
-        self.eval()
-        if hasattr(self, "action_diff") or hasattr(self, "feature_sim"):
-          idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample_recent(args.switch_bsz)
-        if hasattr(self, "action_diff"):
-          deploy_action = (self.deploy_net(states) * self.support).sum(2).argmax(1)
-          online_action = (self.online_net(states) * self.support).sum(2).argmax(1)
-          diff = 1 - deploy_action.eq(online_action).sum().item() / args.switch_bsz
-          self.action_diff.append(diff)
-        if hasattr(self, "feature_sim"):
-          deploy_feature2 = self.deploy_net.extract(states).detach()
-          online_feature2 = self.online_net.extract(states).detach()
-          sim = torch.cosine_similarity(deploy_feature2, online_feature2).mean()
-          # deploy_feature2 = F.normalize(deploy_feature2)
-          # online_feature2 = F.normalize(online_feature2)
-          # sim2 = deploy_feature2.mm(online_feature2.T)
-          # sim = sim2.diagonal().mean()
-          self.feature_sim.append(sim.item())
-        self.train()
-      self.deploy_net.load_state_dict(self.online_net.state_dict())
-      self.num_deploy += 1
+    elif self.deploy_policy == 'fixed':
+      if T % args.delploy_interval == 0:
+        assert self.deploy_net is not self.online_net
+        with torch.no_grad():
+          # self.eval()
+          if hasattr(self, "action_diff") or hasattr(self, "feature_sim"):
+            idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample_recent(args.switch_bsz)
+          if hasattr(self, "action_diff"):
+            deploy_action = (self.deploy_net(states) * self.support).sum(2).argmax(1)
+            online_action = (self.online_net(states) * self.support).sum(2).argmax(1)
+            diff = 1 - deploy_action.eq(online_action).sum().item() / args.switch_bsz
+            self.action_diff.append(diff)
+          if hasattr(self, "feature_sim"):
+            deploy_feature2 = self.deploy_net.extract(states).detach()
+            online_feature2 = self.online_net.extract(states).detach()
+            sim = torch.cosine_similarity(deploy_feature2, online_feature2).mean()
+            # deploy_feature2 = F.normalize(deploy_feature2)
+            # online_feature2 = F.normalize(online_feature2)
+            # sim2 = deploy_feature2.mm(online_feature2.T)
+            # sim = sim2.diagonal().mean()
+            self.feature_sim.append(sim.item())
+          self.train()
+        self.deploy_net.load_state_dict(self.online_net.state_dict())
+        self.num_deploy += 1
     elif self.deploy_policy == 'exp':
       if (T - args.learn_start // args.replay_frequency) >= self.exp_base ** self.exponent:
         assert self.deploy_net is not self.online_net

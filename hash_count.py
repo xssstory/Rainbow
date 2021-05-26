@@ -63,11 +63,12 @@ class HashTable(object):
   
   @property
   def info_matrix_value(self):
-    # (evals, _) = torch.eig(self.info_matrix[self.cur_info_index], eigenvectors=False)
-    # evals = evals[:, 0]
+    (evals, _) = torch.eig(self.info_matrix[self.cur_info_index], eigenvectors=False)
+    evals = evals[:, 0]
     # cur_info_value = evals.abs().min().item()
+    cur_info_value = evals.abs().prod().item()
     # cur_info_value = torch.det(self.info_matrix[self.cur_info_index] + torch.eye(self.info_matrix[self.cur_info_index].size(0), device=self.device))
-    cur_info_value = torch.det(self.info_matrix[self.cur_info_index])
+    # cur_info_value = torch.det(self.info_matrix[self.cur_info_index]).abs()
     previous_value = self.previous_info_value.get(self.cur_info_index, None)
     out_flag = previous_value is None or previous_value == 0 or cur_info_value / previous_value >= self.args.info_matrix_ratio
     if out_flag:

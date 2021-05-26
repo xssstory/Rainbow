@@ -352,17 +352,20 @@ else:
             visited_deploy_flag = False
 
       else:
-        if args.deploy_policy == "fixed":
-            dqn.update_deploy_net(T, args, mem)
+        # if args.deploy_policy == "fixed":
+        #     dqn.update_deploy_net(T, args, mem)
         if T % args.replay_frequency == 0:
           dqn.learn(mem)  # Train with n-step distributional double-Q learning
-          if (args.deploy_policy in ["policy", "policy_diverge", "dqn-feature"]):
+          if args.deploy_policy == "fixed":
+            dqn.update_deploy_net(T, args, None)
+          elif (args.deploy_policy in ["policy", "policy_diverge", "dqn-feature"]):
               if T % (args.replay_frequency * 8) == 0:
                   dqn.update_deploy_net(T, args, mem)
           elif args.deploy_policy == "feature_lowf":
               if T % (args.replay_frequency * 64) == 0:
                   dqn.update_deploy_net(T, args, mem)
-          elif args.deploy_policy != "fixed":
+          # elif args.deploy_policy != "fixed":
+          else:
               dqn.update_deploy_net(T, args, mem)
           
           # If memory path provided, save it
