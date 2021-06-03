@@ -14,26 +14,6 @@ Results and pretrained models can be found in the [releases](https://github.com/
 - [x] Distributional RL [[7]](#references)
 - [x] Noisy Nets [[8]](#references)
 
-Run the original Rainbow with the default arguments:
-
-```
-python main.py
-```
-
-Data-efficient Rainbow [[9]](#references) can be run using the following options (note that the "unbounded" memory is implemented here in practice by manually setting the memory capacity to be the same as the maximum number of timesteps):
-
-```
-python main.py --target-update 2000 \
-               --T-max 100000 \
-               --learn-start 1600 \
-               --memory-capacity 100000 \
-               --replay-frequency 1 \
-               --multi-step 20 \
-               --architecture data-efficient \
-               --hidden-size 256 \
-               --learning-rate 0.0001 \
-               --evaluation-interval 10000
-```
 
 Requirements
 ------------
