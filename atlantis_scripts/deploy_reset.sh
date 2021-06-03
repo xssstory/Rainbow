@@ -1,9 +1,0 @@
-CUDA_VISIBLE_DEVICES=$1 python main.py \
-	--id=atlantis.deploy_whenreset_count_seed_$2 \
-	--env-type=atari \
-	--game=atlantis \
-	--count-base-bonus=0.01 \
-        --seed=$2 \
-	--deploy-policy=reset \
-	--result-dir=/pvc/rainbow_lyf/results \
-	--checkpoint-interval=100000
